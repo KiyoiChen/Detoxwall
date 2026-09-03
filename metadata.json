@@ -1,0 +1,6 @@
+{
+  "name": "DetoxWall",
+  "description": "Local-only digital detox app with daily time limits, child screen blanking (5 min to 5 hours blackout), synthesized loud siren deterrent, parent PIN protection, and usage dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

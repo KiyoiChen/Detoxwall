@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">DetoxWall</string>
+    <string name="accessibility_service_description">DetoxWall detects when limited apps are opened to show the detox wall screen.</string>
+    <string name="device_admin_description">Enables uninstall prevention during active Child Mode.</string>
+    <string name="monitoring_channel_name">DetoxWall Active Monitoring</string>
+    <string name="monitoring_channel_description">Notifies that background app limits and child protections are active.</string>
+</resources>

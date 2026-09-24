@@ -34,10 +34,19 @@ class UsageReader(private val context: Context, private val installedApps: Insta
         val start = startOfDay(date)
         val end = minOf(startOfDay(date.plusDays(1)), now)
         if (end <= start) return emptyMap()
-        return runCatching { usm.queryAndAggregateUsageStats(start, end) }.getOrNull()
-            ?.mapValues { it.value.totalTimeInForeground }
-            ?.filterValues { it > 0 }
-            ?: emptyMap()
+        // Only daily buckets that belong to this day: queryAndAggregateUsageStats() also returns
+        // weekly/monthly/yearly buckets that merely overlap it, which inflated a day to months.
+        val buckets = runCatching { usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end) }.getOrNull()
+            ?: return emptyMap()
+        val dayMs = end - start
+        val totals = HashMap<String, Long>()
+        for (b in buckets) {
+            if (b.lastTimeStamp - b.firstTimeStamp > MAX_DAILY_BUCKET_MS) continue
+            val mid = b.firstTimeStamp + (b.lastTimeStamp - b.firstTimeStamp) / 2
+            if (mid !in start until end) continue
+            totals.merge(b.packageName, b.totalTimeInForeground, Long::plus)
+        }
+        return totals.mapValues { it.value.coerceAtMost(dayMs) }.filterValues { it > 0 }
     }
 
     fun lastDays(count: Int): List<DayUsage> {
@@ -80,6 +89,7 @@ class UsageReader(private val context: Context, private val installedApps: Insta
         private const val EVENT_KEYGUARD_SHOWN = 17
         private const val EVENT_STOPPED = 23
         private const val EVENT_SHUTDOWN = 26
+        private const val MAX_DAILY_BUCKET_MS = 26L * 60 * 60 * 1000
 
         fun startOfDay(date: LocalDate): Long =
             date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()

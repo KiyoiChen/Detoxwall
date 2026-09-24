@@ -16,7 +16,7 @@ import com.example.data.model.UsageLog
         ChildProfile::class,
         ScheduleBlock::class
     ],
-    version = 1,
+    version = 2, // Bumped: added daysOfWeek column to schedule_blocks
     exportSchema = false
 )
 abstract class DetoxDatabase : RoomDatabase() {

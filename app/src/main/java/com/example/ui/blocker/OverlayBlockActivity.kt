@@ -1,10 +1,10 @@
 package com.example.ui.blocker
 
+import android.app.ActivityManager
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -31,16 +32,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -55,7 +53,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,7 +75,6 @@ import com.example.data.repository.DetoxRepository
 import com.example.ui.theme.DetoxMint
 import com.example.ui.theme.LimitRose
 import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.theme.ObsidianBg
 import com.example.ui.theme.WarningAmber
 import com.example.util.AlertSoundManager
 import kotlinx.coroutines.delay
@@ -99,37 +95,48 @@ class OverlayBlockActivity : ComponentActivity() {
 
     private lateinit var repository: DetoxRepository
     private lateinit var alertSoundManager: AlertSoundManager
+    private var blockMode: String = MODE_BLACKOUT
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repository = DetoxRepository(applicationContext)
         alertSoundManager = AlertSoundManager(applicationContext)
 
+        blockMode = intent.getStringExtra(EXTRA_BLOCK_MODE) ?: MODE_BLACKOUT
         val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: "com.instagram.android"
         val appName = intent.getStringExtra(EXTRA_APP_NAME) ?: "Restricted App"
-        val mode = intent.getStringExtra(EXTRA_BLOCK_MODE) ?: MODE_BLACKOUT
 
-        // Make window pitch black and immerse full-screen
+        // ── Window flags for proper lock behavior ────────────────────────────
         window.statusBarColor = android.graphics.Color.BLACK
         window.navigationBarColor = android.graphics.Color.BLACK
+
+        // Keep screen on and show over keyguard (lock screen)
+        @Suppress("DEPRECATION")
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        )
 
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.isAppearanceLightStatusBars = false
         windowInsetsController.isAppearanceLightNavigationBars = false
 
-        if (mode == MODE_CHILD || mode == MODE_BLACKOUT) {
+        // Hide system bars for child/blackout. Swipe reveals them transiently —
+        // the AccessibilityService will re-enforce if user navigates away.
+        if (blockMode == MODE_CHILD || blockMode == MODE_BLACKOUT || blockMode == MODE_FOCUS) {
             windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
             windowInsetsController.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
-        // Child or Blackout mode: Back press attempts trigger audible alarm & record bypass attempt
+        // ── Intercept ALL Back button presses ───────────────────────────────
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (mode == MODE_CHILD || mode == MODE_BLACKOUT) {
-                    handleChildBypassAttempt()
-                } else {
-                    finish()
+                when (blockMode) {
+                    MODE_CHILD, MODE_BLACKOUT -> handleChildBypassAttempt()
+                    MODE_FOCUS -> handleChildBypassAttempt() // focus mode: back also triggers alarm
+                    else -> finish() // Adult soft block allows back
                 }
             }
         })
@@ -140,7 +147,7 @@ class OverlayBlockActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Black
                 ) {
-                    when (mode) {
+                    when (blockMode) {
                         MODE_CHILD, MODE_BLACKOUT -> ChildBlackoutScreen(
                             appName = appName,
                             onAttemptBypass = { handleChildBypassAttempt() },
@@ -159,7 +166,15 @@ class OverlayBlockActivity : ComponentActivity() {
                         )
                         MODE_FOCUS -> FocusLockOverlayScreen(
                             appName = appName,
-                            onClose = { finish() }
+                            onAttemptBypass = { handleChildBypassAttempt() },
+                            onUnlockWithPin = { pin ->
+                                val isValid = repository.securityManager.verifyPin(pin)
+                                if (isValid) {
+                                    alertSoundManager.stopAlert()
+                                    finish()
+                                }
+                                isValid
+                            }
                         )
                         else -> AdultSoftBlockScreen(
                             appName = appName,
@@ -168,6 +183,31 @@ class OverlayBlockActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-enforce immersive fullscreen when returning from system UI swipe
+        if (blockMode == MODE_CHILD || blockMode == MODE_BLACKOUT || blockMode == MODE_FOCUS) {
+            val ctrl = WindowCompat.getInsetsController(window, window.decorView)
+            ctrl.hide(WindowInsetsCompat.Type.systemBars())
+            ctrl.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // For CHILD / BLACKOUT / FOCUS: if we lose focus (e.g. user pressed Recent Apps),
+        // the AccessibilityService will detect the new foreground app and re-launch this block.
+        // We do NOT finish() here — let the AccessibilityService handle re-enforcement.
+        // Log bypass attempt for tracking
+        if (blockMode == MODE_CHILD || blockMode == MODE_BLACKOUT || blockMode == MODE_FOCUS) {
+            lifecycleScope.launch {
+                val activeId = repository.securityManager.getActiveProfileId()
+                repository.registerBypassAttempt(activeId)
             }
         }
     }
@@ -188,9 +228,9 @@ class OverlayBlockActivity : ComponentActivity() {
 
 /**
  * Child Blackout Screen:
- * When child screen time reaches limit, the whole screen turns 100% pitch black.
- * Discrete subtle tap affordance allows parent to enter PIN to unlock.
- * Any unauthorized interaction or incorrect PIN triggers the loud audible siren immediately.
+ * Full-screen pitch black. Only unlock via parent PIN.
+ * Back button triggers alarm and records bypass attempt.
+ * Cannot be dismissed by tapping outside the dialog.
  */
 @Composable
 fun ChildBlackoutScreen(
@@ -207,21 +247,19 @@ fun ChildBlackoutScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // Tap on black screen → open PIN dialog (not dismiss)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
-            ) {
-                // Tapping black screen prompts parent PIN
-                showPinDialog = true
-            }
+            ) { showPinDialog = true }
             .testTag("child_blackout_screen"),
         contentAlignment = Alignment.Center
     ) {
-        // Pure pitch black screen with very subtle, gentle parent indicator at bottom
+        // Subtle parent-tap indicator at bottom
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 36.dp, start = 24.dp, end = 24.dp),
+                .padding(bottom = 40.dp, start = 24.dp, end = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
@@ -249,16 +287,17 @@ fun ChildBlackoutScreen(
             }
         }
 
-        // Parent PIN Unlock Card Dialog
+        // PIN Unlock Dialog — cannot be dismissed by tapping outside
         if (showPinDialog) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.94f))
+                    .background(Color.Black.copy(alpha = 0.96f))
+                    // Intercept all taps so outside-tap cannot dismiss
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { /* Catch clicks */ }
+                    ) { /* Block outside taps */ }
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -289,7 +328,7 @@ fun ChildBlackoutScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
                             text = "Parent Unlock",
@@ -301,7 +340,7 @@ fun ChildBlackoutScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = "Screen turned black for $appName. Enter parent PIN to resume.",
+                            text = "Screen turned black for $appName.\nEnter parent PIN to resume.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF94A3B8),
                             textAlign = TextAlign.Center
@@ -352,35 +391,22 @@ fun ChildBlackoutScreen(
                         if (pinError) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "⚠️ Incorrect PIN! Loud siren alarm activated.",
+                                text = "⚠️ Incorrect PIN — alarm activated",
                                 color = LimitRose,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = {
-                                    showPinDialog = false
-                                    pinText = ""
-                                    pinError = false
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color(0xFF94A3B8)
-                                )
-                            ) {
-                                Text("Back to Black")
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
+                        // Fixed button layout — no weight clipping
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             Button(
                                 onClick = {
                                     val ok = onUnlockWithPin(pinText)
@@ -390,8 +416,8 @@ fun ChildBlackoutScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
+                                    .fillMaxWidth()
+                                    .height(50.dp)
                                     .testTag("parent_unlock_confirm_btn"),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -399,13 +425,29 @@ fun ChildBlackoutScreen(
                                     contentColor = Color.White
                                 )
                             ) {
-                                Text("Unlock", fontWeight = FontWeight.Bold)
+                                Text("Unlock", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    showPinDialog = false
+                                    pinText = ""
+                                    pinError = false
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFF94A3B8)
+                                )
+                            ) {
+                                Text("Back to Black Screen")
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        // Quick Test Siren Action
                         TextButton(
                             onClick = onTestSiren,
                             modifier = Modifier.testTag("blackout_test_siren_btn")
@@ -428,8 +470,7 @@ fun ChildBlackoutScreen(
 
 /**
  * Adult Soft Block Screen:
- * "Time's up" overlay with mandatory 5-second delay before dismissal
- * to break automatic dopamine scrolling loops.
+ * 5-second mindfulness pause before dismissal.
  */
 @Composable
 fun AdultSoftBlockScreen(
@@ -451,10 +492,7 @@ fun AdultSoftBlockScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0F172A),
-                        Color(0xFF020617)
-                    )
+                    colors = listOf(Color(0xFF0F172A), Color(0xFF020617))
                 )
             )
             .padding(28.dp)
@@ -522,7 +560,8 @@ fun AdultSoftBlockScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = if (countdown > 0) "Take a deep breath ($countdown s)..." else "Pause complete. Close the app or proceed mindfully.",
+                        text = if (countdown > 0) "Take a deep breath ($countdown s)..."
+                               else "Pause complete. Close the app or proceed mindfully.",
                         fontSize = 13.sp,
                         color = if (countdown > 0) WarningAmber else DetoxMint,
                         textAlign = TextAlign.Center
@@ -580,31 +619,41 @@ fun AdultSoftBlockScreen(
 
 /**
  * Focus Lock Overlay Screen:
- * Displayed when user is in manual Focus Session.
+ * Displayed when user opens a restricted app during an active Focus Session.
+ * NO dismiss button — only parent PIN can unlock it.
+ * This prevents Focus Mode bypass via "Back to DetoxWall" escape.
  */
 @Composable
 fun FocusLockOverlayScreen(
     appName: String,
-    onClose: () -> Unit
+    onAttemptBypass: () -> Unit,
+    onUnlockWithPin: (String) -> Boolean
 ) {
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinText by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF1E1B4B),
-                        Color(0xFF0F172A)
-                    )
+                    colors = listOf(Color(0xFF1E1B4B), Color(0xFF0F172A))
                 )
             )
-            .padding(28.dp)
+            // Intercept taps — cannot be tapped away
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { /* block taps */ }
             .testTag("focus_lock_overlay"),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(28.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -640,21 +689,168 @@ fun FocusLockOverlayScreen(
                 textAlign = TextAlign.Center
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "To stop Focus Mode, ask a parent to end the session in DetoxWall.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF64748B),
+                textAlign = TextAlign.Center
+            )
+
             Spacer(modifier = Modifier.height(28.dp))
 
-            Button(
-                onClick = onClose,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("return_to_focus_button"),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6366F1),
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(14.dp)
+            // Parent PIN unlock only — no free dismiss
+            TextButton(
+                onClick = { showPinDialog = true },
+                modifier = Modifier.testTag("focus_parent_unlock_btn")
             ) {
-                Text("Back to DetoxWall", fontWeight = FontWeight.Bold)
+                Icon(
+                    Icons.Default.Security,
+                    contentDescription = null,
+                    tint = Color(0xFF818CF8),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    "Parent Unlock",
+                    color = Color(0xFF818CF8),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        // PIN Dialog — cannot be dismissed by tapping outside
+        if (showPinDialog) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.90f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { /* block outside taps */ }
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(24.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Parent Unlock",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Enter parent PIN to exit Focus Mode.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF94A3B8),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = pinText,
+                            onValueChange = {
+                                if (it.length <= 6 && it.all { c -> c.isDigit() }) {
+                                    pinText = it
+                                    pinError = false
+                                }
+                            },
+                            label = { Text("Parent PIN", color = Color(0xFF94A3B8)) },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.NumberPassword,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    val ok = onUnlockWithPin(pinText)
+                                    if (!ok) {
+                                        pinError = true
+                                        onAttemptBypass()
+                                    }
+                                }
+                            ),
+                            isError = pinError,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("focus_pin_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF818CF8),
+                                unfocusedBorderColor = Color(0xFF475569),
+                                errorBorderColor = LimitRose,
+                                focusedContainerColor = Color(0xFF1E293B),
+                                unfocusedContainerColor = Color(0xFF1E293B)
+                            )
+                        )
+
+                        if (pinError) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                "Incorrect PIN",
+                                color = LimitRose,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val ok = onUnlockWithPin(pinText)
+                                    if (!ok) {
+                                        pinError = true
+                                        onAttemptBypass()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF6366F1),
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text("Unlock", fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    showPinDialog = false
+                                    pinText = ""
+                                    pinError = false
+                                },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFF94A3B8)
+                                )
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

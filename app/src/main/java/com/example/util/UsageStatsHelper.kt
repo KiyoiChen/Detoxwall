@@ -54,7 +54,6 @@ class UsageStatsHelper(private val context: Context) {
      * Checks if Accessibility Service is enabled.
      */
     fun isAccessibilityServiceEnabled(): Boolean {
-        val expectedServiceName = "${context.packageName}/com.example.service.DetoxAccessibilityService"
         val enabledServices = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
@@ -94,6 +93,67 @@ class UsageStatsHelper(private val context: Context) {
             }
         }
         return usageMap
+    }
+
+    /**
+     * Queries real UsageStats for a specific day (represented by a Calendar instance).
+     * Returns map of packageName -> milliseconds used.
+     * Returns empty map if permission not granted.
+     */
+    fun getUsageForDate(dateCal: Calendar): Map<String, Long> {
+        if (!hasUsageStatsPermission() || usageStatsManager == null) {
+            return emptyMap()
+        }
+
+        // Create start of day
+        val startCal = dateCal.clone() as Calendar
+        startCal.set(Calendar.HOUR_OF_DAY, 0)
+        startCal.set(Calendar.MINUTE, 0)
+        startCal.set(Calendar.SECOND, 0)
+        startCal.set(Calendar.MILLISECOND, 0)
+
+        // Create end of day
+        val endCal = startCal.clone() as Calendar
+        endCal.add(Calendar.DAY_OF_YEAR, 1)
+
+        val startTime = startCal.timeInMillis
+        val endTime = minOf(endCal.timeInMillis, System.currentTimeMillis())
+
+        // Don't query future dates
+        if (startTime > System.currentTimeMillis()) return emptyMap()
+
+        val stats: List<UsageStats> = try {
+            usageStatsManager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY,
+                startTime,
+                endTime
+            ) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        val usageMap = mutableMapOf<String, Long>()
+        for (stat in stats) {
+            if (stat.totalTimeInForeground > 0) {
+                val current = usageMap[stat.packageName] ?: 0L
+                usageMap[stat.packageName] = current + stat.totalTimeInForeground
+            }
+        }
+        return usageMap
+    }
+
+    /**
+     * Returns human-readable app name from package name.
+     */
+    fun getAppName(packageName: String): String {
+        return try {
+            val pm = context.packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(appInfo).toString()
+        } catch (e: PackageManager.NameNotFoundException) {
+            packageName.substringAfterLast('.')
+                .replaceFirstChar { it.uppercaseChar() }
+        }
     }
 
     /**
@@ -216,7 +276,6 @@ class UsageStatsHelper(private val context: Context) {
      */
     fun getSamplePastWeekLogs(): List<UsageLog> {
         val list = mutableListOf<UsageLog>()
-        val cal = Calendar.getInstance()
         val dayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val dayNameFormat = SimpleDateFormat("EEE", Locale.getDefault())
 

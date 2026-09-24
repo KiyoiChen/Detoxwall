@@ -19,6 +19,12 @@ class SecurityManager(context: Context) {
         private const val KEY_CHILD_ACCUMULATED_MIN = "child_accumulated_min"
         private const val KEY_SIREN_ALARM_ENABLED = "siren_alarm_enabled"
         private const val KEY_SIREN_VOLUME_PERCENT = "siren_volume_percent"
+        private const val KEY_THEME_MODE = "theme_mode"
+
+        // Theme mode constants
+        const val THEME_SYSTEM = "system"
+        const val THEME_LIGHT = "light"
+        const val THEME_DARK = "dark"
     }
 
     fun hasPinSet(): Boolean {
@@ -41,6 +47,19 @@ class SecurityManager(context: Context) {
         val storedSalt = prefs.getString(KEY_PIN_SALT, null) ?: return false
         val candidateHash = hashPinWithSalt(pin, storedSalt)
         return storedHash == candidateHash
+    }
+
+    fun changePin(currentPin: String, newPin: String): Boolean {
+        if (!verifyPin(currentPin)) return false
+        return setParentPin(newPin)
+    }
+
+    fun removePin(): Boolean {
+        prefs.edit()
+            .remove(KEY_PIN_HASH)
+            .remove(KEY_PIN_SALT)
+            .apply()
+        return true
     }
 
     fun isChildModeEnabled(): Boolean {
@@ -103,6 +122,18 @@ class SecurityManager(context: Context) {
     fun setSirenVolumePercent(percent: Int) {
         val clamped = percent.coerceIn(10, 100)
         prefs.edit().putInt(KEY_SIREN_VOLUME_PERCENT, clamped).apply()
+    }
+
+    // Theme Mode (persists Light/Dark/System preference)
+    fun getThemeMode(): String {
+        return prefs.getString(KEY_THEME_MODE, THEME_DARK) ?: THEME_DARK
+    }
+
+    fun setThemeMode(mode: String) {
+        require(mode in listOf(THEME_SYSTEM, THEME_LIGHT, THEME_DARK)) {
+            "Invalid theme mode: $mode"
+        }
+        prefs.edit().putString(KEY_THEME_MODE, mode).apply()
     }
 
     private fun generateSalt(): String {

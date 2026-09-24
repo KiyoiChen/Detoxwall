@@ -28,13 +28,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
+import com.example.ui.components.ClerkAuthDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -99,10 +104,17 @@ fun ChildModeScreen(
     val sirenVolumePercent by viewModel.sirenVolumePercent.collectAsStateWithLifecycle()
     val isSirenPlaying by viewModel.isSirenPlaying.collectAsStateWithLifecycle()
 
+    val isClerkSignedIn by viewModel.isClerkSignedIn.collectAsStateWithLifecycle()
+    val clerkUser by viewModel.clerkUser.collectAsStateWithLifecycle()
+    val clerkPublishableKey by viewModel.clerkPublishableKey.collectAsStateWithLifecycle()
+
     val currentProfile = profiles.firstOrNull() ?: ChildProfile()
 
     var showPinSetupDialog by remember { mutableStateOf(false) }
     var showPinVerifyDialog by remember { mutableStateOf(false) }
+    var showChangePinDialog by remember { mutableStateOf(false) }
+    var showRemovePinDialog by remember { mutableStateOf(false) }
+    var showClerkAuthDialog by remember { mutableStateOf(false) }
     var pendingToggleAction by remember { mutableStateOf(false) }
 
     fun formatMinutesToHuman(mins: Int): String {
@@ -185,6 +197,7 @@ fun ChildModeScreen(
                         checked = isChildModeActive,
                         onCheckedChange = { enable ->
                             if (!hasParentPin) {
+                                pendingToggleAction = true
                                 showPinSetupDialog = true
                             } else if (!enable) {
                                 pendingToggleAction = false
@@ -202,6 +215,244 @@ fun ChildModeScreen(
                         ),
                         modifier = Modifier.testTag("child_protection_switch")
                     )
+                }
+            }
+        }
+
+        // ==========================================
+        // 1B. PARENT SECURITY PIN MANAGEMENT CARD
+        // ==========================================
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("parent_pin_security_card"),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121722)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2638))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF162238))
+                                .border(1.dp, Color(0xFF233554), RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Key,
+                                contentDescription = "Parent PIN",
+                                tint = DetoxMint,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Parent Security PIN",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (hasParentPin) DetoxMint.copy(alpha = 0.15f) else Color(0xFF334155))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (hasParentPin) "Active" else "Not Set",
+                                        color = if (hasParentPin) DetoxMint else Color(0xFF94A3B8),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (hasParentPin)
+                                    "PIN is active. Protects child timeout, settings, and bypass attempts."
+                                else
+                                    "No PIN configured. Set a 4-digit PIN to lock down settings.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF8E9DAE),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (hasParentPin) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { showChangePinDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("change_pin_btn"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1E293B),
+                                    contentColor = Color.White
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155))
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Change PIN", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { showRemovePinDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("remove_pin_btn"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = LimitRose
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LimitRose.copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Remove PIN", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                pendingToggleAction = false
+                                showPinSetupDialog = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .testTag("set_initial_pin_btn"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = DetoxMint,
+                                contentColor = Color(0xFF042F2E)
+                            )
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Set Parent 4-Digit PIN", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 1C. PARENT CLERK ACCOUNT CARD
+        // ==========================================
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("clerk_account_card"),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF14132B)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF28234D))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF221F54))
+                                .border(1.dp, Color(0xFF3B358A), RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "C",
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 22.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Parent Account",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isClerkSignedIn) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFF334155))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (isClerkSignedIn) "Clerk Active" else "Not Signed In",
+                                        color = if (isClerkSignedIn) Color(0xFF34D399) else Color(0xFF94A3B8),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isClerkSignedIn)
+                                    "Connected: ${clerkUser?.email ?: "Clerk User"}"
+                                else
+                                    "Sign in with Clerk to protect your parental dashboard",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFA5A1C8),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { showClerkAuthDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF6C47FF),
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier.testTag("open_clerk_auth_btn")
+                    ) {
+                        Text(
+                            text = if (isClerkSignedIn) "Account" else "Sign In",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -613,7 +864,7 @@ fun ChildModeScreen(
                             ),
                             border = androidx.compose.foundation.BorderStroke(1.dp, LimitRose.copy(alpha = 0.5f))
                         ) {
-                            Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Test Siren Alarm Sound", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         }
@@ -779,14 +1030,16 @@ fun ChildModeScreen(
                             errorMessage = "PINs do not match"
                         } else {
                             viewModel.setParentPin(pinInput)
-                            viewModel.toggleChildMode(currentProfile.id, true)
+                            if (pendingToggleAction) {
+                                viewModel.toggleChildMode(currentProfile.id, true)
+                            }
                             showPinSetupDialog = false
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = DetoxMint, contentColor = Color(0xFF042F2E)),
                     modifier = Modifier.testTag("save_parent_pin_btn")
                 ) {
-                    Text("Save & Enable")
+                    Text(if (pendingToggleAction) "Save & Enable" else "Save PIN")
                 }
             },
             dismissButton = {
@@ -870,6 +1123,223 @@ fun ChildModeScreen(
                 }
             },
             containerColor = Color(0xFF131926)
+        )
+    }
+
+    // ==========================================
+    // Change PIN Dialog
+    // ==========================================
+    if (showChangePinDialog) {
+        var currentPinInput by remember { mutableStateOf("") }
+        var newPinInput by remember { mutableStateOf("") }
+        var confirmPinInput by remember { mutableStateOf("") }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { showChangePinDialog = false },
+            title = {
+                Text(
+                    text = "Change Parent PIN",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Enter your current PIN, then choose a new 4-digit PIN.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+
+                    OutlinedTextField(
+                        value = currentPinInput,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { c -> c.isDigit() }) {
+                                currentPinInput = it
+                                errorMessage = null
+                            }
+                        },
+                        label = { Text("Current 4-Digit PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("change_current_pin_input")
+                    )
+
+                    OutlinedTextField(
+                        value = newPinInput,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { c -> c.isDigit() }) {
+                                newPinInput = it
+                                errorMessage = null
+                            }
+                        },
+                        label = { Text("New 4-Digit PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("change_new_pin_input")
+                    )
+
+                    OutlinedTextField(
+                        value = confirmPinInput,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { c -> c.isDigit() }) {
+                                confirmPinInput = it
+                                errorMessage = null
+                            }
+                        },
+                        label = { Text("Confirm New PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("change_confirm_pin_input")
+                    )
+
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage ?: "",
+                            color = LimitRose,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (!viewModel.verifyParentPin(currentPinInput)) {
+                            errorMessage = "Current PIN is incorrect"
+                        } else if (newPinInput.length != 4) {
+                            errorMessage = "New PIN must be exactly 4 digits"
+                        } else if (newPinInput == currentPinInput) {
+                            errorMessage = "New PIN must be different from current PIN"
+                        } else if (newPinInput != confirmPinInput) {
+                            errorMessage = "New PINs do not match"
+                        } else {
+                            val success = viewModel.changeParentPin(currentPinInput, newPinInput)
+                            if (success) {
+                                showChangePinDialog = false
+                            } else {
+                                errorMessage = "Failed to update PIN"
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DetoxMint, contentColor = Color(0xFF042F2E)),
+                    modifier = Modifier.testTag("save_changed_pin_btn")
+                ) {
+                    Text("Save New PIN")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showChangePinDialog = false }) {
+                    Text("Cancel", color = Color(0xFF94A3B8))
+                }
+            },
+            containerColor = Color(0xFF131926)
+        )
+    }
+
+    // ==========================================
+    // Remove PIN Confirmation Dialog
+    // ==========================================
+    if (showRemovePinDialog) {
+        var currentPinInput by remember { mutableStateOf("") }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { showRemovePinDialog = false },
+            title = {
+                Text(
+                    text = "Remove Parent PIN?",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Enter your current PIN to remove parent protection. Child Mode will be deactivated.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+
+                    OutlinedTextField(
+                        value = currentPinInput,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { c -> c.isDigit() }) {
+                                currentPinInput = it
+                                errorMessage = null
+                            }
+                        },
+                        label = { Text("Current 4-Digit PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("remove_pin_verify_input")
+                    )
+
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage ?: "",
+                            color = LimitRose,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val removed = viewModel.removeParentPin(currentPinInput)
+                        if (removed) {
+                            showRemovePinDialog = false
+                        } else {
+                            errorMessage = "Incorrect PIN. Cannot remove protection."
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LimitRose, contentColor = Color.White),
+                    modifier = Modifier.testTag("confirm_remove_pin_btn")
+                ) {
+                    Text("Remove Protection")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemovePinDialog = false }) {
+                    Text("Cancel", color = Color(0xFF94A3B8))
+                }
+            },
+            containerColor = Color(0xFF131926)
+        )
+    }
+
+    // ==========================================
+    // Clerk Authentication Dialog
+    // ==========================================
+    if (showClerkAuthDialog) {
+        ClerkAuthDialog(
+            isSignedIn = isClerkSignedIn,
+            currentUser = clerkUser,
+            publishableKey = clerkPublishableKey,
+            onSignIn = { email, pass, onResult ->
+                viewModel.signInWithClerk(email, pass, onResult)
+            },
+            onSignUp = { email, pass, onResult ->
+                viewModel.signUpWithClerk(email, pass, onResult)
+            },
+            onSignOut = {
+                viewModel.signOutClerk()
+            },
+            onUpdatePublishableKey = { newKey ->
+                viewModel.updateClerkPublishableKey(newKey)
+            },
+            onSignInLocal = { localEmail ->
+                viewModel.signInLocalParent(localEmail)
+            },
+            onDismiss = { showClerkAuthDialog = false }
         )
     }
 }

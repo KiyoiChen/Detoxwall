@@ -25,4 +25,7 @@ interface ScheduleBlockDao {
 
     @Query("UPDATE schedule_blocks SET isEnabled = :isEnabled WHERE id = :id")
     suspend fun setEnabled(id: Long, isEnabled: Boolean)
+
+    @Query("SELECT * FROM schedule_blocks WHERE id = :id")
+    suspend fun getById(id: Long): ScheduleBlock?
 }

@@ -87,7 +87,8 @@ class DetoxRepository(
                     startMinute = 30,
                     endHour = 15,
                     endMinute = 0,
-                    daysSummary = "Mon - Fri",
+                    daysOfWeek = ScheduleBlock.MON or ScheduleBlock.TUE or ScheduleBlock.WED or ScheduleBlock.THU or ScheduleBlock.FRI,
+                    daysSummary = "Mon–Fri",
                     isEnabled = false
                 )
             )
@@ -98,6 +99,7 @@ class DetoxRepository(
                     startMinute = 30,
                     endHour = 7,
                     endMinute = 0,
+                    daysOfWeek = 0b1111111, // every day
                     daysSummary = "Every day",
                     isEnabled = true
                 )
@@ -189,6 +191,10 @@ class DetoxRepository(
         scheduleBlockDao.insert(schedule)
     }
 
+    suspend fun updateSchedule(schedule: ScheduleBlock) = withContext(Dispatchers.IO) {
+        scheduleBlockDao.update(schedule)
+    }
+
     suspend fun toggleSchedule(id: Long, isEnabled: Boolean) = withContext(Dispatchers.IO) {
         scheduleBlockDao.setEnabled(id, isEnabled)
     }
@@ -197,10 +203,11 @@ class DetoxRepository(
         scheduleBlockDao.delete(schedule)
     }
 
-    fun isScheduleActiveNow(): Boolean {
-        // Will check active schedule blocks against current time
-        val cal = Calendar.getInstance()
-        val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-        return false // evaluated reactively or via service
+    /**
+     * Checks if any enabled schedule is active right now based on current time and day of week.
+     * This is evaluated synchronously for use in services.
+     */
+    fun isScheduleActiveNow(schedules: List<ScheduleBlock>): Boolean {
+        return schedules.any { ScheduleBlock.isActiveNow(it) }
     }
 }

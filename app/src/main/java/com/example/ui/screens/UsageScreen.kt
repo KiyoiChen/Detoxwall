@@ -3,7 +3,6 @@ package com.example.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,27 +16,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Gamepad
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,25 +43,19 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.theme.DetoxMint
+import com.example.ui.theme.LimitRose
 import com.example.ui.theme.ObsidianBg
+import com.example.ui.theme.WarningAmber
 import com.example.ui.viewmodel.DetoxViewModel
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-data class MockAppUsage(
-    val name: String,
-    val durationText: String,
-    val usageMinutes: Int,
-    val maxMinutes: Int,
-    val barColor: Color,
-    val iconColor: Color,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-)
 
 @Composable
 fun UsageScreen(
@@ -75,62 +63,30 @@ fun UsageScreen(
     contentPadding: PaddingValues,
     onBackToHome: () -> Unit = {}
 ) {
-    val limits by viewModel.appLimits.collectAsStateWithLifecycle()
+    val selectedDate by viewModel.selectedUsageDate.collectAsStateWithLifecycle()
+    val usageForDate by viewModel.usageForDate.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoadingUsage.collectAsStateWithLifecycle()
+    val hasUsageStats by viewModel.hasUsageStatsPermission.collectAsStateWithLifecycle()
 
-    val totalTodayMinutes = remember(limits) {
-        val sum = limits.sumOf { it.currentUsageMinutes }
-        if (sum == 0) 165 else sum // Default to 2h 45m (165m) as shown in mockup
-    }
+    val dateLabel = formatDateLabel(selectedDate)
+    val isToday = isSameDay(selectedDate, Calendar.getInstance())
+    val isFuture = selectedDate.timeInMillis > Calendar.getInstance().timeInMillis + 86400_000L
 
-    val hrs = totalTodayMinutes / 60
-    val mins = totalTodayMinutes % 60
-    val formattedTotal = "${hrs}h ${mins}m"
+    // Build sorted usage list from real data
+    val usageList = usageForDate.entries
+        .map { (pkg, ms) -> pkg to ms }
+        .sortedByDescending { it.second }
+        .take(10)
 
-    val todayDateFormatted = remember {
-        val sdf = SimpleDateFormat("dd MMM", Locale.getDefault())
-        "Today, ${sdf.format(Date())}"
-    }
-
-    // App items directly matching the mockup
-    val appsList = remember(limits) {
-        listOf(
-            MockAppUsage(
-                name = "YouTube",
-                durationText = "1h 20m",
-                usageMinutes = 80,
-                maxMinutes = 100,
-                barColor = Color(0xFFFF3B30),
-                iconColor = Color(0xFFFF3B30),
-                icon = Icons.Default.PlayArrow
-            ),
-            MockAppUsage(
-                name = "TikTok",
-                durationText = "45m",
-                usageMinutes = 45,
-                maxMinutes = 100,
-                barColor = Color(0xFF25F4EE),
-                iconColor = Color(0xFF25F4EE),
-                icon = Icons.Default.MusicNote
-            ),
-            MockAppUsage(
-                name = "Instagram",
-                durationText = "25m",
-                usageMinutes = 25,
-                maxMinutes = 100,
-                barColor = Color(0xFFE1306C),
-                iconColor = Color(0xFFE1306C),
-                icon = Icons.Default.PhotoCamera
-            ),
-            MockAppUsage(
-                name = "Games",
-                durationText = "15m",
-                usageMinutes = 15,
-                maxMinutes = 100,
-                barColor = Color(0xFF3B82F6),
-                iconColor = Color(0xFF3B82F6),
-                icon = Icons.Default.Gamepad
-            )
-        )
+    val totalMs = usageForDate.values.sumOf { it }
+    val totalMinutes = (totalMs / 60_000L).toInt()
+    val totalHrs = totalMinutes / 60
+    val totalMins = totalMinutes % 60
+    val formattedTotal = when {
+        totalMinutes == 0 -> "0m"
+        totalHrs == 0 -> "${totalMins}m"
+        totalMins == 0 -> "${totalHrs}h"
+        else -> "${totalHrs}h ${totalMins}m"
     }
 
     LazyColumn(
@@ -139,63 +95,126 @@ fun UsageScreen(
             .background(ObsidianBg)
             .padding(contentPadding)
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 48.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 48.dp)
     ) {
-        // ==========================================
-        // 1. DATE SELECTOR PILL (Matched to Mockup)
-        // ==========================================
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF121722))
-                    .border(1.dp, Color(0xFF1D2638), RoundedCornerShape(16.dp))
-                    .clickable { /* Date selector */ }
-                    .padding(horizontal = 18.dp, vertical = 12.dp)
-                    .testTag("date_selector_pill"),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CalendarToday,
-                        contentDescription = "Date",
-                        tint = DetoxMint,
-                        modifier = Modifier.size(18.dp)
-                    )
-
-                    Text(
-                        text = todayDateFormatted,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        fontSize = 14.sp
-                    )
-
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "Next Date",
-                        tint = DetoxMint,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
-
-        // ==========================================
-        // 2. SCREEN TIME & WAVE CHART CARD
-        // ==========================================
+        // ── Date Navigation ────────────────────────────────────────────────
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("screen_time_wave_card"),
-                shape = RoundedCornerShape(22.dp),
+                    .testTag("date_navigation_card"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121722)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2638))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // ← Previous day
+                    IconButton(
+                        onClick = { viewModel.navigateUsageDateBack() },
+                        modifier = Modifier.testTag("prev_day_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Previous Day",
+                            tint = DetoxMint
+                        )
+                    }
+
+                    // Date label
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = null,
+                            tint = DetoxMint,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = dateLabel,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    // → Next day (disabled if today)
+                    IconButton(
+                        onClick = { viewModel.navigateUsageDateForward() },
+                        enabled = !isToday && !isFuture,
+                        modifier = Modifier.testTag("next_day_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Next Day",
+                            tint = if (!isToday && !isFuture) DetoxMint else Color(0xFF334155)
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── No Permission Notice ───────────────────────────────────────────
+        if (!hasUsageStats) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Usage Stats Permission Required",
+                            color = WarningAmber,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Grant Usage Stats access in the Schedules tab to see real app usage data.",
+                            color = Color(0xFF94A3B8),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            return@LazyColumn
+        }
+
+        // ── Loading indicator ──────────────────────────────────────────────
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = DetoxMint, modifier = Modifier.size(36.dp))
+                }
+            }
+            return@LazyColumn
+        }
+
+        // ── Screen Time Summary Card ───────────────────────────────────────
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("screen_time_card"),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF121722)),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2638))
             ) {
@@ -208,7 +227,7 @@ fun UsageScreen(
                         text = "Screen Time",
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFF8E9DAE),
-                        fontSize = 13.sp
+                        fontSize = 12.sp
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -217,129 +236,65 @@ fun UsageScreen(
                         text = formattedTotal,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
+                        color = if (totalMinutes == 0) Color(0xFF64748B) else Color.White,
                         fontSize = 28.sp
                     )
 
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
-                        text = "Total Usage",
+                        text = if (totalMinutes == 0) "No usage recorded" else "Total tracked usage",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF8E9DAE),
                         fontSize = 12.sp
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    if (usageList.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    // Smooth Glowing Cyan Wave Curve Chart
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(130.dp)
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val w = size.width
-                            val h = size.height
-
-                            // Points representing usage curve: [12AM, 6AM, 12PM, 6PM, 12AM]
-                            val points = listOf(
-                                Offset(0f, h * 0.85f),
-                                Offset(w * 0.20f, h * 0.70f),
-                                Offset(w * 0.38f, h * 0.40f),
-                                Offset(w * 0.52f, h * 0.75f),
-                                Offset(w * 0.70f, h * 0.45f),
-                                Offset(w * 0.85f, h * 0.65f),
-                                Offset(w, h * 0.25f)
-                            )
-
-                            // Path for stroke
-                            val strokePath = Path().apply {
-                                moveTo(points[0].x, points[0].y)
-                                for (i in 0 until points.size - 1) {
-                                    val p0 = points[i]
-                                    val p1 = points[i + 1]
-                                    val midX = (p0.x + p1.x) / 2
-                                    cubicTo(midX, p0.y, midX, p1.y, p1.x, p1.y)
-                                }
-                            }
-
-                            // Path for gradient fill
-                            val fillPath = Path().apply {
-                                addPath(strokePath)
-                                lineTo(w, h)
-                                lineTo(0f, h)
-                                close()
-                            }
-
-                            // Draw subtle gradient fill underneath
-                            drawPath(
-                                path = fillPath,
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        DetoxMint.copy(alpha = 0.35f),
-                                        DetoxMint.copy(alpha = 0.05f),
-                                        Color.Transparent
-                                    ),
-                                    startY = 0f,
-                                    endY = h
-                                )
-                            )
-
-                            // Draw vibrant cyan curve line
-                            drawPath(
-                                path = strokePath,
-                                color = DetoxMint,
-                                style = Stroke(
-                                    width = 3.dp.toPx(),
-                                    cap = StrokeCap.Round
-                                )
-                            )
-
-                            // Draw highlighted peaks
-                            drawCircle(
-                                color = DetoxMint,
-                                radius = 4.dp.toPx(),
-                                center = points[2]
-                            )
-                            drawCircle(
-                                color = DetoxMint,
-                                radius = 4.dp.toPx(),
-                                center = points[6]
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Timeline Markers: 12 AM, 6 AM, 12 PM, 6 PM, 12 AM
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        val labels = listOf("12 AM", "6 AM", "12 PM", "6 PM", "12 AM")
-                        labels.forEach { label ->
-                            Text(
-                                text = label,
-                                fontSize = 11.sp,
-                                color = Color(0xFF64748B),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        // Smooth wave chart (proportional to actual usage)
+                        UsageWaveChart(usageList = usageList, maxMs = usageList.first().second)
                     }
                 }
             }
         }
 
-        // ==========================================
-        // 3. MOST USED APPS CARD (Matched to Mockup)
-        // ==========================================
+        // ── Empty State ────────────────────────────────────────────────────
+        if (usageList.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "No Usage Data",
+                            color = Color(0xFF64748B),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Android UsageStats has no data\nfor ${formatDateLabel(selectedDate)}.",
+                            color = Color(0xFF475569),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            return@LazyColumn
+        }
+
+        // ── Most Used Apps Card ────────────────────────────────────────────
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("most_used_apps_card"),
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF121722)),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2638))
             ) {
@@ -352,13 +307,26 @@ fun UsageScreen(
                         text = "Most Used Apps",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        fontSize = 16.sp
+                        color = Color.White
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    appsList.forEachIndexed { index, app ->
+                    val maxMs = usageList.firstOrNull()?.second ?: 1L
+
+                    usageList.forEachIndexed { index, (pkg, ms) ->
+                        val appName = getAppDisplayName(pkg)
+                        val minutes = (ms / 60_000L).toInt()
+                        val hours = minutes / 60
+                        val mins = minutes % 60
+                        val durationText = when {
+                            hours > 0 && mins > 0 -> "${hours}h ${mins}m"
+                            hours > 0 -> "${hours}h"
+                            else -> "${mins}m"
+                        }
+                        val progressFraction = (ms.toFloat() / maxMs.toFloat()).coerceIn(0.02f, 1f)
+                        val barColor = appBarColor(index)
+
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -366,47 +334,42 @@ fun UsageScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    // App Icon Squircle
                                     Box(
                                         modifier = Modifier
                                             .size(34.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(app.barColor.copy(alpha = 0.18f))
-                                            .border(1.dp, app.barColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                                            .background(barColor.copy(alpha = 0.18f))
+                                            .border(1.dp, barColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = app.icon,
-                                            contentDescription = app.name,
-                                            tint = app.iconColor,
-                                            modifier = Modifier.size(18.dp)
+                                        Text(
+                                            text = appName.take(1).uppercase(),
+                                            color = barColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
                                         )
                                     }
 
                                     Spacer(modifier = Modifier.width(12.dp))
 
                                     Text(
-                                        text = app.name,
+                                        text = appName,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Color.White,
-                                        fontSize = 14.sp
+                                        color = Color.White
                                     )
                                 }
 
                                 Text(
-                                    text = app.durationText,
+                                    text = durationText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF94A3B8),
-                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Colored progress track
-                            val progressFraction = (app.usageMinutes.toFloat() / app.maxMinutes.toFloat()).coerceIn(0.05f, 1f)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -419,17 +382,195 @@ fun UsageScreen(
                                         .fillMaxWidth(progressFraction)
                                         .height(4.dp)
                                         .clip(RoundedCornerShape(2.dp))
-                                        .background(app.barColor)
+                                        .background(barColor)
                                 )
                             }
                         }
 
-                        if (index < appsList.size - 1) {
-                            Spacer(modifier = Modifier.height(18.dp))
+                        if (index < usageList.size - 1) {
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
                 }
             }
         }
+
+        // ── Breakdown by minutes ───────────────────────────────────────────
+        item {
+            Text(
+                "Usage Breakdown",
+                color = Color(0xFF94A3B8),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        items(usageList.size) { index ->
+            val (pkg, ms) = usageList[index]
+            val minutes = (ms / 60_000L).toInt()
+            val limitMinutes = 60 // default reference; real limits shown in App Limits tab
+            val progressFraction = (minutes.toFloat() / limitMinutes.toFloat()).coerceIn(0f, 1f)
+            val color = when {
+                progressFraction >= 1f -> LimitRose
+                progressFraction >= 0.8f -> WarningAmber
+                else -> DetoxMint
+            }
+            val appName = getAppDisplayName(pkg)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = appName,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "${minutes}m",
+                        color = color,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
     }
 }
+
+@Composable
+private fun UsageWaveChart(usageList: List<Pair<String, Long>>, maxMs: Long) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(100.dp)
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            // Build proportional points from actual usage data (up to 7)
+            val capped = usageList.take(7)
+            val points = if (capped.isEmpty()) {
+                listOf(
+                    Offset(0f, h * 0.85f),
+                    Offset(w, h * 0.85f)
+                )
+            } else {
+                val step = w / (capped.size + 1).toFloat()
+                listOf(Offset(0f, h * 0.9f)) +
+                capped.mapIndexed { i, (_, ms) ->
+                    val normalized = 1f - (ms.toFloat() / maxMs.toFloat()).coerceIn(0.05f, 0.95f)
+                    Offset((i + 1) * step, h * normalized)
+                } +
+                listOf(Offset(w, h * 0.9f))
+            }
+
+            val strokePath = Path().apply {
+                moveTo(points[0].x, points[0].y)
+                for (i in 0 until points.size - 1) {
+                    val p0 = points[i]
+                    val p1 = points[i + 1]
+                    val midX = (p0.x + p1.x) / 2
+                    cubicTo(midX, p0.y, midX, p1.y, p1.x, p1.y)
+                }
+            }
+
+            val fillPath = Path().apply {
+                addPath(strokePath)
+                lineTo(w, h)
+                lineTo(0f, h)
+                close()
+            }
+
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        DetoxMint.copy(alpha = 0.30f),
+                        DetoxMint.copy(alpha = 0.03f),
+                        Color.Transparent
+                    ),
+                    startY = 0f,
+                    endY = h
+                )
+            )
+
+            drawPath(
+                path = strokePath,
+                color = DetoxMint,
+                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+    }
+}
+
+private fun formatDateLabel(cal: Calendar): String {
+    val today = Calendar.getInstance()
+    val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+
+    return when {
+        isSameDay(cal, today) -> {
+            val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
+            "Today, ${sdf.format(cal.time)}"
+        }
+        isSameDay(cal, yesterday) -> {
+            val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
+            "Yesterday, ${sdf.format(cal.time)}"
+        }
+        else -> {
+            SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault()).format(cal.time)
+        }
+    }
+}
+
+private fun isSameDay(a: Calendar, b: Calendar): Boolean {
+    return a.get(Calendar.YEAR) == b.get(Calendar.YEAR) &&
+           a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+}
+
+private fun getAppDisplayName(packageName: String): String {
+    val known = mapOf(
+        "com.instagram.android" to "Instagram",
+        "com.zhiliaoapp.musically" to "TikTok",
+        "com.google.android.youtube" to "YouTube",
+        "com.twitter.android" to "X (Twitter)",
+        "com.facebook.katana" to "Facebook",
+        "com.snapchat.android" to "Snapchat",
+        "com.reddit.frontpage" to "Reddit",
+        "com.netflix.mediaclient" to "Netflix",
+        "com.android.chrome" to "Chrome",
+        "com.google.android.gm" to "Gmail",
+        "com.whatsapp" to "WhatsApp",
+        "com.spotify.music" to "Spotify",
+        "com.discord" to "Discord",
+        "com.google.android.apps.maps" to "Google Maps"
+    )
+    return known[packageName]
+        ?: packageName.substringAfterLast('.').replaceFirstChar { it.uppercaseChar() }
+}
+
+private val APP_COLORS = listOf(
+    Color(0xFF00E5BE), // mint
+    Color(0xFF6366F1), // indigo
+    Color(0xFFFF3366), // rose
+    Color(0xFFF59E0B), // amber
+    Color(0xFF25F4EE), // cyan
+    Color(0xFFE1306C), // pink
+    Color(0xFF3B82F6), // blue
+    Color(0xFF8B5CF6), // purple
+    Color(0xFF10B981), // emerald
+    Color(0xFFF97316), // orange
+)
+
+private fun appBarColor(index: Int): Color = APP_COLORS[index % APP_COLORS.size]

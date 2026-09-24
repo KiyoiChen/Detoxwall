@@ -35,6 +35,8 @@ import com.example.ui.apps.AppsScreen
 import com.example.ui.apps.AppsViewModel
 import com.example.ui.home.HomeScreen
 import com.example.ui.home.HomeViewModel
+import com.example.ui.gate.PinGateScreen
+import com.example.ui.onboarding.OnboardingScreen
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.settings.SettingsViewModel
 import com.example.ui.schedules.SchedulesScreen
@@ -54,12 +56,18 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     SETTINGS("Settings", Icons.Filled.Settings),
 }
 
+private enum class Root { ONBOARDING, GATE, MAIN }
+
+private const val RELOCK_AFTER_MS = 30_000L
+
 class MainActivity : ComponentActivity() {
     private val homeViewModel: HomeViewModel by viewModels()
     private val appsViewModel: AppsViewModel by viewModels()
     private val insightsViewModel: InsightsViewModel by viewModels()
     private val schedulesViewModel: SchedulesViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
+    private val unlocked = androidx.compose.runtime.mutableStateOf(false)
+    private var stoppedAt = 0L
     private val permissionStatuses = androidx.compose.runtime.mutableStateOf<List<PermissionStatus>>(emptyList())
 
     private fun refreshPermissions() {
@@ -76,8 +84,30 @@ class MainActivity : ComponentActivity() {
             var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
             var showPermissions by rememberSaveable { mutableStateOf(false) }
             BackHandler(enabled = showPermissions) { showPermissions = false }
+            val pinSet by container.pinManager.isPinSet.collectAsStateWithLifecycle()
+            val screen = when {
+                !appSettings.onboardingDone -> Root.ONBOARDING
+                pinSet && appSettings.requirePinOnOpen && !unlocked.value -> Root.GATE
+                else -> Root.MAIN
+            }
             DetoxTheme(mode = appSettings.themeMode) {
-                Scaffold(
+              AnimatedContent(
+                targetState = screen,
+                transitionSpec = { fadeIn(tween(350)) togetherWith fadeOut(tween(250)) },
+                label = "root",
+              ) { root ->
+                when (root) {
+                Root.ONBOARDING -> OnboardingScreen(
+                    pinManager = container.pinManager,
+                    permissions = permissionStatuses.value,
+                    onPermissionsChanged = ::refreshPermissions,
+                    onFinished = {
+                        unlocked.value = true
+                        settings.update { it.copy(onboardingDone = true) }
+                    },
+                )
+                Root.GATE -> PinGateScreen(container.pinManager) { unlocked.value = true }
+                Root.MAIN -> Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
@@ -125,8 +155,23 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                }
+              }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Ask for the PIN again if the app was in the background for a while
+        // (short trips, e.g. to a permission page, don't count).
+        if (stoppedAt != 0L && System.currentTimeMillis() - stoppedAt > RELOCK_AFTER_MS) unlocked.value = false
+        stoppedAt = 0L
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) stoppedAt = System.currentTimeMillis()
     }
 
     override fun onResume() {

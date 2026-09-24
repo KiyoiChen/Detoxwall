@@ -20,9 +20,9 @@ Legend: `[ ]` todo · `[x]` done. Each task lists the requirements it satisfies.
 - [ ] **B7** `GuardianService` (sticky FGS) + `BootReceiver` + `DetoxDeviceAdminReceiver` (minimal policy) (R10, R11)
 
 ## Phase C — UI
-- [ ] **C1** Theme (dark/light), motion kit, shared components (PinPad, ProgressRing, AppIcon, cards) (R25)
+- [x] **C1** Theme (dark/light), motion kit, shared components (PinPad, ProgressRing, AppIcon, cards) (R25)
 - [ ] **C2** `MainViewModel` + `DetoxApp` root (Onboarding → Gate → Tabs) (R5, R19, R20)
-- [ ] **C3** Onboarding: welcome, create PIN, permission checklist (R19)
+- [x] **C3** Onboarding: welcome, create PIN, permission checklist (R19)
 - [x] **C4** Home screen (R21)
 - [x] **C5** Apps screen + picker + edit sheet (R22)
 - [x] **C6** Schedules screen + editor (R17)
@@ -38,4 +38,5 @@ Legend: `[ ]` todo · `[x]` done. Each task lists the requirements it satisfies.
 ## Status notes (2026-09-24)
 - **Built so far:** Home, Apps, Schedules, Insights (monthly chart + per-day apps), Settings (theme, parent PIN), Permissions screen.
 - **Tests:** 20 unit/Robolectric tests pass (PIN hashing + lockout, PinManager persistence, usage calculator, schedule matching).
-- **Not built:** the blocking engine (Phase B services/overlay), onboarding, the parent gate. Limits, schedules and focus sessions are saved but **do not block apps yet**.
+- **Also built:** onboarding and the PIN screen on open (relocks after 30 s in the background).
+- **Not built:** the blocking engine (Phase B services/overlay). Limits, schedules and focus sessions are saved but **do not block apps yet**.

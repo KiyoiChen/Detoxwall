@@ -16,6 +16,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     val isPinSet: StateFlow<Boolean> = c.pinManager.isPinSet
 
     fun setTheme(mode: ThemeMode) = c.settings.update { it.copy(themeMode = mode) }
+    fun setRequirePinOnOpen(on: Boolean) = c.settings.update { it.copy(requirePinOnOpen = on) }
 
     fun setPin(pin: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch { onDone(c.pinManager.setPin(pin)) }

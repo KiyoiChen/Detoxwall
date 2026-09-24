@@ -16,7 +16,9 @@ DetoxWall shows how much you use each app, lets you set daily limits and schedul
 | **Apps** | Your limited apps with real icons, time left and colored progress bars; add apps from a searchable picker (most-used first); edit limits with a slider (5 min – 4 h) and presets; pause or remove a limit |
 | **Schedules** | Named routines with start/end times, weekday chips and on/off switches; overnight times supported; "Active now" indicator; one-tap starters (School hours, Bedtime, Homework) |
 | **Insights** | Bar chart for every day of the month, month-to-month navigation, monthly total and daily average; tap a day to see each app's usage that day |
-| **Settings** | Light / Dark / System theme; set or change the parent PIN; permissions |
+| **Onboarding** | First run: animated welcome → create a parent PIN (optional) → permissions |
+| **PIN screen** | Asks for the parent PIN when the app opens and after 30 s in the background; live countdown during lockout |
+| **Settings** | Light / Dark / System theme; set or change the parent PIN; "Ask for PIN when opening" switch; permissions |
 | **Permissions** | Usage access, notifications and battery, each with a live status; tap to open the right system page |
 
 **Parent PIN:** 4–8 digits, stored only on the device as a PBKDF2-HMAC-SHA256 hash (120k iterations, random salt, constant-time check). After 5 wrong tries it locks out for 30 s, doubling each time up to 15 min. The lockout survives restarts. Backups are disabled.
@@ -96,8 +98,8 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 
 ## Roadmap
 
-- [ ] First-run onboarding (welcome → create PIN → permissions)
-- [ ] Parent PIN screen when opening the app
+- [x] First-run onboarding (welcome → create PIN → permissions)
+- [x] Parent PIN screen when opening the app (and after 30 s in the background; can be turned off in Settings)
 - [ ] Blocking when a limit, schedule or focus session is active (not started)
 - [ ] Screenshot tests for key components
 

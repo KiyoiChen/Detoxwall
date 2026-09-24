@@ -29,6 +29,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -98,6 +99,24 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
                         )
                     }
                     Text(if (pinSet) "Change" else "Set up", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+
+        if (pinSet) {
+            item {
+                SectionCard(Modifier.enterAnimation(150)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Ask for PIN when opening", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Also asked again after 30 s in the background.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = settings.requirePinOnOpen, onCheckedChange = viewModel::setRequirePinOnOpen)
+                    }
                 }
             }
         }

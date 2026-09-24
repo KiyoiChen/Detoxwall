@@ -12,6 +12,8 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 data class Settings(
     val onboardingDone: Boolean = false,
+    /** Ask for the parent PIN every time the app is opened (only when a PIN is set). */
+    val requirePinOnOpen: Boolean = true,
     val childMode: Boolean = false,
     val tamperProtection: Boolean = true,
     val blackoutEnabled: Boolean = true,
@@ -86,6 +88,7 @@ class SettingsStore(context: Context) {
 
     private fun read(): Settings = Settings(
         onboardingDone = prefs.getBoolean("onboarding_done", false),
+        requirePinOnOpen = prefs.getBoolean("require_pin_on_open", true),
         childMode = prefs.getBoolean("child_mode", false),
         tamperProtection = prefs.getBoolean("tamper_protection", true),
         blackoutEnabled = prefs.getBoolean("blackout_enabled", true),
@@ -104,6 +107,7 @@ class SettingsStore(context: Context) {
 
     private fun write(s: Settings) = prefs.edit(commit = true) {
         putBoolean("onboarding_done", s.onboardingDone)
+        putBoolean("require_pin_on_open", s.requirePinOnOpen)
         putBoolean("child_mode", s.childMode)
         putBoolean("tamper_protection", s.tamperProtection)
         putBoolean("blackout_enabled", s.blackoutEnabled)

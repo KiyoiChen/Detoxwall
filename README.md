@@ -5,7 +5,7 @@
 No account, no internet, no ads, no tracking. Everything stays **on the phone**.
 
 <p align="center">
-  <a href="https://github.com/IsmailAbdulkareem/Detoxwall-/releases/latest/download/DetoxWall.apk">
+  <a href="https://github.com/IsmailAbdulkareem/Detoxwall/releases/latest/download/DetoxWall.apk">
     <img src="https://img.shields.io/badge/Download-DetoxWall.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download DetoxWall APK">
   </a>
 </p>
@@ -28,7 +28,7 @@ No account, no internet, no ads, no tracking. Everything stays **on the phone**.
 
 ## Download & install
 
-1. **Download:** [DetoxWall.apk](https://github.com/IsmailAbdulkareem/Detoxwall-/releases/latest/download/DetoxWall.apk) (latest release).
+1. **Download:** [DetoxWall.apk](https://github.com/IsmailAbdulkareem/Detoxwall/releases/latest/download/DetoxWall.apk) (latest release).
 2. Open the file on your phone. If asked, allow your browser or Files app to **install unknown apps**.
 3. Open DetoxWall, create a parent PIN, and grant the permissions it asks for:
    - **Usage access**: measures how long each app is used.

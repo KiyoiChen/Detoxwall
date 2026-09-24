@@ -1,7 +1,8 @@
 <resources>
     <string name="app_name">DetoxWall</string>
-    <string name="accessibility_service_description">DetoxWall detects when limited apps are opened to show the detox wall screen.</string>
-    <string name="device_admin_description">Enables uninstall prevention during active Child Mode.</string>
-    <string name="monitoring_channel_name">DetoxWall Active Monitoring</string>
-    <string name="monitoring_channel_description">Notifies that background app limits and child protections are active.</string>
+    <string name="accessibility_service_summary">Enforces screen-time limits and Child Mode protection.</string>
+    <string name="accessibility_service_description">DetoxWall watches which app is on screen so it can enforce the daily limits, schedules and Child Mode lock you configured. It also shields its own settings from being changed without the parent PIN. No data leaves this device.</string>
+    <string name="device_admin_description">Prevents DetoxWall from being uninstalled while Child Mode is protecting this device.</string>
+    <string name="guardian_channel_name">Protection status</string>
+    <string name="guardian_channel_description">Shows that DetoxWall protection is running.</string>
 </resources>

@@ -1,12 +1,17 @@
 package com.example
 
 import android.app.Application
-import com.example.auth.ClerkAuthManager
+import android.content.Context
 
 class DetoxApplication : Application() {
+    lateinit var container: AppContainer
+        private set
+
     override fun onCreate() {
         super.onCreate()
-        // Initialize Clerk authentication with stored or default publishable key
-        ClerkAuthManager.initialize(this)
+        container = AppContainer(this)
     }
 }
+
+val Context.container: AppContainer
+    get() = (applicationContext as DetoxApplication).container

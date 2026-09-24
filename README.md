@@ -20,8 +20,9 @@ No account, no internet, no ads, no tracking. Everything stays **on the phone**.
 
 ## Demo
 
-<!-- Replace the next line with your screen recording (see "Adding the demo video" below). -->
-_Demo video coming soon._
+<p align="center">
+  <img src="docs/demo.gif" width="300" alt="DetoxWall demo: setting app limits, Child Mode and the lock screen">
+</p>
 
 ---
 
@@ -151,14 +152,6 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 - [x] Child Mode with daily allowance and parent-PIN unlock
 - [ ] Siren on bypass attempts
 - [ ] Screenshot tests for key components
-
----
-
-## Adding the demo video
-
-1. On GitHub, open `README.md` and click the ✏️ edit button.
-2. Drag your screen recording (MP4, under 10 MB) into the editor. GitHub uploads it and inserts a link like `https://github.com/user-attachments/assets/...`.
-3. Put that link on its own line in place of _"Demo video coming soon."_ and commit. GitHub shows it as a video player.
 
 For strong, hard-to-bypass parental control today, Android's built-in **Digital Wellbeing** and Google **Family Link** are the recommended tools. DetoxWall doesn't replace them.
 

@@ -31,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.enforcement.GuardianService
 import com.example.ui.apps.AppsScreen
 import com.example.ui.apps.AppsViewModel
 import com.example.ui.home.HomeScreen
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        GuardianService.start(this)
         val settings = container.settings
         setContent {
             val appSettings by settings.settings.collectAsStateWithLifecycle()

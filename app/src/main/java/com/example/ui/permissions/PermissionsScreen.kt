@@ -34,7 +34,9 @@ import com.example.usage.PermissionStatus
 import com.example.usage.Permissions
 
 /** Permissions the current build actually uses. The others come with later parts of the app. */
-val AVAILABLE_PERMISSIONS = listOf(PermissionKind.USAGE_ACCESS, PermissionKind.NOTIFICATIONS, PermissionKind.BATTERY)
+val AVAILABLE_PERMISSIONS = listOf(
+    PermissionKind.USAGE_ACCESS, PermissionKind.ACCESSIBILITY, PermissionKind.NOTIFICATIONS, PermissionKind.BATTERY,
+)
 
 fun currentPermissions(context: Context): List<PermissionStatus> =
     AVAILABLE_PERMISSIONS.map { PermissionStatus(it, Permissions.isGranted(context, it)) }
@@ -78,6 +80,21 @@ fun PermissionsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 33 && statuses.any { it.kind == PermissionKind.ACCESSIBILITY && !it.granted }) {
+            item {
+                SectionCard(Modifier.enterAnimation(60), onClick = {
+                    runCatching { context.startActivity(Permissions.appDetailsIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }) {
+                    Text("Accessibility greyed out?", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Android restricts it for apps installed from a file. Tap here, open the ⋮ menu, " +
+                            "choose \"Allow restricted settings\", then enable Accessibility again.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         itemsIndexed(statuses, key = { _, s -> s.kind }) { index, status ->

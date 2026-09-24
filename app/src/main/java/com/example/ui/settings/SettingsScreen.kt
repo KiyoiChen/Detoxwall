@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
@@ -57,6 +58,8 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val pinSet by viewModel.isPinSet.collectAsStateWithLifecycle()
     var pinFlow by remember { mutableStateOf(false) }
+    var enableChildAfterPin by remember { mutableStateOf(false) }
+    var confirmChildOff by remember { mutableStateOf(false) }
 
     LazyColumn(
         contentPadding = PaddingValues(
@@ -67,6 +70,54 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { Text("Settings", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.enterAnimation()) }
+
+        item {
+            SectionCard(Modifier.enterAnimation(30)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.ChildCare, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Child Mode", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (settings.childMode) "On. The parent PIN is needed to turn it off."
+                            else "Locks the phone when the daily allowance or a lock schedule is reached.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = settings.childMode,
+                        onCheckedChange = { on ->
+                            when {
+                                !on -> confirmChildOff = true
+                                pinSet -> viewModel.setChildMode(true)
+                                // A PIN is required first, otherwise the child could just switch it off.
+                                else -> { enableChildAfterPin = true; pinFlow = true }
+                            }
+                        },
+                    )
+                }
+                if (settings.childMode) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Daily screen-time allowance", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Switch(checked = settings.blackoutEnabled, onCheckedChange = viewModel::setBlackoutEnabled)
+                    }
+                    if (settings.blackoutEnabled) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { viewModel.changeBlackoutLimit(-15) }) { Text("−15") }
+                            Text(
+                                "${settings.blackoutLimitMinutes} min per day",
+                                style = MaterialTheme.typography.titleSmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { viewModel.changeBlackoutLimit(15) }) { Text("+15") }
+                        }
+                    }
+                }
+            }
+        }
 
         item {
             SectionCard(Modifier.enterAnimation(60)) {
@@ -128,7 +179,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Permissions", style = MaterialTheme.typography.titleMedium)
-                        Text("Usage access, notifications, battery", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Usage access, accessibility, notifications, battery", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(Icons.Filled.ChevronRight, contentDescription = null)
                 }
@@ -146,7 +197,62 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
         }
     }
 
-    if (pinFlow) PinSetupFlow(viewModel, requireCurrent = pinSet, onClose = { pinFlow = false })
+    if (pinFlow) PinSetupFlow(viewModel, requireCurrent = pinSet, onClose = {
+        pinFlow = false
+        if (enableChildAfterPin && viewModel.isPinSet.value) viewModel.setChildMode(true)
+        enableChildAfterPin = false
+    })
+    if (confirmChildOff) PinConfirmDialog(
+        viewModel,
+        title = "Enter parent PIN to turn off Child Mode",
+        onConfirmed = { confirmChildOff = false; viewModel.setChildMode(false) },
+        onClose = { confirmChildOff = false },
+    )
+}
+
+/** Asks for the current parent PIN and calls [onConfirmed] once it verifies. */
+@Composable
+private fun PinConfirmDialog(viewModel: SettingsViewModel, title: String, onConfirmed: () -> Unit, onClose: () -> Unit) {
+    var entry by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+    var errorKey by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(
+                Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(8.dp))
+                Text(message ?: " ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.height(32.dp))
+                PinPad(
+                    value = entry,
+                    errorKey = errorKey,
+                    enabled = !busy,
+                    onValueChange = { value ->
+                        entry = value
+                        message = null
+                        if (value.length == 4 && !busy) {
+                            busy = true
+                            viewModel.verifyPin(value) { result ->
+                                busy = false
+                                when (result) {
+                                    PinResult.Success, PinResult.NotSet -> onConfirmed()
+                                    is PinResult.Wrong -> { message = "Wrong PIN. ${result.attemptsLeft} tries left."; entry = ""; errorKey++ }
+                                    is PinResult.LockedOut -> { message = "Too many tries. Wait ${(result.remainingMs + 999) / 1000} s."; entry = ""; errorKey++ }
+                                }
+                            }
+                        }
+                    },
+                )
+                TextButton(onClick = onClose) { Text("Cancel") }
+            }
+        }
+    }
 }
 
 private enum class PinStep { CURRENT, NEW, CONFIRM, DONE }

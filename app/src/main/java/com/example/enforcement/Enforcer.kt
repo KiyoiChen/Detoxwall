@@ -47,8 +47,8 @@ object Enforcer {
         // 2. Emergency dialer always reachable
         if (foreground != null && foreground in emergencyPackages) return Decision.None
 
-        // 3. Whole-device lock (Child Mode only)
-        if (strict) {
+        // 3. Whole-device lock (Child Mode only; paused while a parent unlock is running)
+        if (strict && !settings.isMaintenance(now)) {
             if (settings.manualLock) return Decision.LockDevice(LockReason.MANUAL)
             active.firstOrNull { it.lockDevice }?.let {
                 return Decision.LockDevice(LockReason.SCHEDULE, it.name)

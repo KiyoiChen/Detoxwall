@@ -45,6 +45,7 @@ import com.example.ui.schedules.SchedulesViewModel
 import com.example.ui.insights.InsightsScreen
 import com.example.ui.insights.InsightsViewModel
 import com.example.ui.permissions.PermissionsScreen
+import com.example.ui.play.PlaySessionScreen
 import com.example.ui.permissions.currentPermissions
 import com.example.usage.PermissionStatus
 import com.example.ui.theme.DetoxTheme
@@ -57,7 +58,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     SETTINGS("Settings", Icons.Filled.Settings),
 }
 
-private enum class Root { ONBOARDING, GATE, MAIN }
+private enum class Root { ONBOARDING, GATE, PLAY, MAIN }
 
 private const val RELOCK_AFTER_MS = 30_000L
 
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private val schedulesViewModel: SchedulesViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
     private val unlocked = androidx.compose.runtime.mutableStateOf(false)
+    private val parentRequested = androidx.compose.runtime.mutableStateOf(false)
     private var stoppedAt = 0L
     private val permissionStatuses = androidx.compose.runtime.mutableStateOf<List<PermissionStatus>>(emptyList())
 
@@ -89,7 +91,9 @@ class MainActivity : ComponentActivity() {
             val pinSet by container.pinManager.isPinSet.collectAsStateWithLifecycle()
             val screen = when {
                 !appSettings.onboardingDone -> Root.ONBOARDING
-                pinSet && appSettings.requirePinOnOpen && !unlocked.value -> Root.GATE
+                appSettings.childMode && appSettings.playSessionEnabled && !unlocked.value &&
+                    !parentRequested.value -> Root.PLAY
+                pinSet && (appSettings.requirePinOnOpen || parentRequested.value) && !unlocked.value -> Root.GATE
                 else -> Root.MAIN
             }
             DetoxTheme(mode = appSettings.themeMode) {
@@ -108,7 +112,15 @@ class MainActivity : ComponentActivity() {
                         settings.update { it.copy(onboardingDone = true) }
                     },
                 )
-                Root.GATE -> PinGateScreen(container.pinManager) { unlocked.value = true }
+                Root.GATE -> PinGateScreen(container.pinManager) {
+                    unlocked.value = true
+                    parentRequested.value = false
+                }
+                Root.PLAY -> PlaySessionScreen(
+                    settings = appSettings,
+                    onStart = { minutes -> settings.startPlaySession(minutes) },
+                    onParent = { parentRequested.value = true },
+                )
                 Root.MAIN -> Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
@@ -173,7 +185,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) stoppedAt = System.currentTimeMillis()
+        if (!isChangingConfigurations) {
+            stoppedAt = System.currentTimeMillis()
+            // Never leave the adult management tabs exposed while the child plays.
+            if (container.settings.current.childMode && container.settings.current.playSessionEnabled) {
+                unlocked.value = false
+                parentRequested.value = false
+            }
+        }
     }
 
     override fun onResume() {

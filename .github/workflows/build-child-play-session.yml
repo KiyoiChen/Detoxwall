@@ -6,6 +6,10 @@ on:
       - feature/child-play-session
   workflow_dispatch:
 
+concurrency:
+  group: child-timer-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 

@@ -133,6 +133,8 @@ class DetoxAccessibilityService : AccessibilityService() {
                 countedTotalMinutes = c.usageReader.countedTotalMinutes(usageCache),
                 protectedSurface = protectedSurface,
                 emergencyPackages = setOfNotNull(c.installedApps.defaultDialer()),
+                sessionEntryPackages = c.installedApps.launcherPackages() + packageName +
+                    setOfNotNull(c.installedApps.defaultDialer()),
             )
         )
     }

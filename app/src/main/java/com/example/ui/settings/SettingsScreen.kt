@@ -60,6 +60,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
     var pinFlow by remember { mutableStateOf(false) }
     var enableChildAfterPin by remember { mutableStateOf(false) }
     var confirmChildOff by remember { mutableStateOf(false) }
+    var confirmPlayReset by remember { mutableStateOf(false) }
 
     LazyColumn(
         contentPadding = PaddingValues(
@@ -98,6 +99,23 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
                     )
                 }
                 if (settings.childMode) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("讓孩子選擇單次遊戲時間", style = MaterialTheme.typography.bodyMedium)
+                            Text("只能選一次；時間到整機鎖定，家長重設才能再玩。",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = settings.playSessionEnabled,
+                            onCheckedChange = viewModel::setPlaySessionEnabled)
+                    }
+                    if (settings.playSessionEnabled) {
+                        TextButton(onClick = { confirmPlayReset = true }) {
+                            Text("家長：重設遊戲回合")
+                        }
+                        Text("如有需要，調高每日螢幕上限，以免提前鎖機。",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Daily screen-time allowance", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -202,6 +220,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
         if (enableChildAfterPin && viewModel.isPinSet.value) viewModel.setChildMode(true)
         enableChildAfterPin = false
     })
+    if (confirmPlayReset) PinConfirmDialog(
+        viewModel,
+        title = "輸入家長 PIN 以重設遊戲回合",
+        onConfirmed = { confirmPlayReset = false; viewModel.resetPlaySession() },
+        onClose = { confirmPlayReset = false },
+    )
     if (confirmChildOff) PinConfirmDialog(
         viewModel,
         title = "Enter parent PIN to turn off Child Mode",

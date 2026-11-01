@@ -28,6 +28,8 @@ data class Settings(
     val focusEndAt: Long = 0L,
     val focusLabel: String = "Focus",
     val maintenanceUntil: Long = 0L,
+    val playSessionEnabled: Boolean = false,
+    val playSessionEndAt: Long = 0L,
     /** In-memory counter bumped when per-day grants change so collectors re-evaluate. */
     val revision: Int = 0,
 ) {
@@ -55,6 +57,22 @@ class SettingsStore(context: Context) {
         write(next)
         _settings.value = next
     }
+
+    /** Only one round may be started; reset requires a verified parent PIN in the UI. */
+    fun startPlaySession(minutes: Int, now: Long = System.currentTimeMillis()): Boolean {
+        if (minutes !in PlaySessionPolicy.optionsMinutes) return false
+        var started = false
+        update { previous ->
+            if (!previous.childMode || !previous.playSessionEnabled || previous.playSessionEndAt != 0L) previous
+            else {
+                started = true
+                previous.copy(playSessionEndAt = PlaySessionPolicy.deadline(now, minutes))
+            }
+        }
+        return started
+    }
+
+    fun resetPlaySession() = update { it.copy(playSessionEndAt = 0L, maintenanceUntil = 0L) }
 
     // ── Per-day extra time & snoozes ─────────────────────────────────────────
 
@@ -103,6 +121,8 @@ class SettingsStore(context: Context) {
         focusEndAt = prefs.getLong("focus_end", 0L),
         focusLabel = prefs.getString("focus_label", "Focus") ?: "Focus",
         maintenanceUntil = prefs.getLong("maintenance_until", 0L),
+        playSessionEnabled = prefs.getBoolean("play_session_enabled", false),
+        playSessionEndAt = prefs.getLong("play_session_end_at", 0L),
     )
 
     private fun write(s: Settings) = prefs.edit(commit = true) {
@@ -121,6 +141,8 @@ class SettingsStore(context: Context) {
         putLong("focus_end", s.focusEndAt)
         putString("focus_label", s.focusLabel)
         putLong("maintenance_until", s.maintenanceUntil)
+        putBoolean("play_session_enabled", s.playSessionEnabled)
+        putLong("play_session_end_at", s.playSessionEndAt)
     }
 
     companion object {

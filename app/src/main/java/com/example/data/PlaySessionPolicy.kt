@@ -1,6 +1,6 @@
 package com.example.data
 
-/** A single child-selected round stays spent until a parent explicitly resets it. */
+/** A round runs to its deadline. After expiration, screen off/on opens the next picker. */
 enum class PlaySessionState { DISABLED, READY, RUNNING, EXPIRED }
 
 object PlaySessionPolicy {
@@ -12,6 +12,14 @@ object PlaySessionPolicy {
         now < endAt -> PlaySessionState.RUNNING
         else -> PlaySessionState.EXPIRED
     }
+
+    /** Do not recycle a round before its deadline or during parent maintenance. */
+    fun resetOnScreenTransition(
+        enabled: Boolean,
+        endAt: Long,
+        now: Long,
+        parentMaintenance: Boolean,
+    ): Boolean = !parentMaintenance && state(enabled, endAt, now) == PlaySessionState.EXPIRED
 
     fun deadline(now: Long, minutes: Int): Long {
         require(minutes in optionsMinutes) { "Unsupported play duration" }

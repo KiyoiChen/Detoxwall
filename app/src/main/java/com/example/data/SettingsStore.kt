@@ -58,7 +58,7 @@ class SettingsStore(context: Context) {
         _settings.value = next
     }
 
-    /** Only one round may be started; reset requires a verified parent PIN in the UI. */
+    /** Only one round can be running at once. Screen wake resets expired rounds. */
     fun startPlaySession(minutes: Int, now: Long = System.currentTimeMillis()): Boolean {
         if (minutes !in PlaySessionPolicy.optionsMinutes) return false
         var started = false
@@ -73,6 +73,16 @@ class SettingsStore(context: Context) {
     }
 
     fun resetPlaySession() = update { it.copy(playSessionEndAt = 0L, maintenanceUntil = 0L) }
+
+    /** Reset only an expired round; called from screen-off/screen-on notifications. */
+    fun prepareNextPlaySession(now: Long = System.currentTimeMillis()) {
+        update {
+            if (it.childMode && PlaySessionPolicy.resetOnScreenTransition(
+                    it.playSessionEnabled, it.playSessionEndAt, now, it.isMaintenance(now)
+                )
+            ) it.copy(playSessionEndAt = 0L) else it
+        }
+    }
 
     // ── Per-day extra time & snoozes ─────────────────────────────────────────
 

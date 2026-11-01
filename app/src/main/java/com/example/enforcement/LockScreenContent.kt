@@ -57,12 +57,15 @@ fun LockScreenContent(
                 BlockReason.LIMIT -> "Time's up" to "You've used today's time for $label."
                 BlockReason.FOCUS -> "Focus session" to "$label is paused until your focus session ends."
                 BlockReason.SCHEDULE -> "Blocked by schedule" to "$label is blocked during \"${decision.detail}\"."
+                BlockReason.PLAY_NOT_STARTED -> "Choose play time first" to
+                    "Open DetoxWall and choose 5, 10, 15, or 30 minutes before playing."
             }
         }
         is Decision.LockDevice -> "Phone locked" to when (decision.reason) {
             LockReason.ALLOWANCE -> "Today's screen time is used up."
             LockReason.SCHEDULE -> "Locked during \"${decision.detail}\"."
             LockReason.MANUAL -> "Locked by a parent."
+            LockReason.PLAY_SESSION -> "Play time is over. Ask a parent to unlock."
         }
         else -> "" to ""
     }

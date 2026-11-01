@@ -103,7 +103,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("讓孩子選擇單次遊戲時間", style = MaterialTheme.typography.bodyMedium)
-                            Text("只能選一次；時間到整機鎖定，家長重設才能再玩。",
+                            Text("時間到先鎖定；關螢幕再亮屏可選下一輪。",
                                 style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(checked = settings.playSessionEnabled,

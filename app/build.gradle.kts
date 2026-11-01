@@ -47,6 +47,9 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
+      // Install test builds alongside the original DetoxWall instead of overwriting it.
+      applicationIdSuffix = ".childtimer"
+      versionNameSuffix = "-childtimer-test"
       signingConfigs.findByName("debugConfig")?.let {
         signingConfig = it
       }

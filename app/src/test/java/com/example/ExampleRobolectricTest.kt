@@ -13,6 +13,6 @@ import org.robolectric.annotation.Config
 class ExampleRobolectricTest {
     @Test fun `app name resource`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        assertEquals("遊戲時間小管家（測試版）", context.getString(R.string.app_name))
+        assertEquals("遊戲時間小管家（亮屏版）", context.getString(R.string.app_name))
     }
 }

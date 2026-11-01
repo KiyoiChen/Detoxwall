@@ -56,7 +56,7 @@ fun PlaySessionScreen(settings: Settings, onStart: (Int) -> Unit, onParent: () -
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-                Text("選定後不能重新選擇；時間到需家長解鎖。", textAlign = TextAlign.Center)
+                Text("選完就開始；時間到先關閉螢幕，再亮屏可選下一輪。", textAlign = TextAlign.Center)
             }
             PlaySessionState.RUNNING -> {
                 val seconds = ((settings.playSessionEndAt - now).coerceAtLeast(0L) + 999L) / 1000L
@@ -66,7 +66,7 @@ fun PlaySessionScreen(settings: Settings, onStart: (Int) -> Unit, onParent: () -
             }
             PlaySessionState.EXPIRED -> {
                 Text("時間到了！", style = MaterialTheme.typography.headlineSmall)
-                Text("請找家長幫忙解鎖。", textAlign = TextAlign.Center)
+                Text("關閉螢幕，再次亮屏後可以選擇下一輪。", textAlign = TextAlign.Center)
             }
             PlaySessionState.DISABLED -> Text("請由家長開啟遊戲回合功能。")
         }

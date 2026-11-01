@@ -48,8 +48,8 @@ android {
     }
     debug {
       // Install test builds alongside the original DetoxWall instead of overwriting it.
-      applicationIdSuffix = ".childtimer"
-      versionNameSuffix = "-childtimer-test"
+      applicationIdSuffix = ".childtimer2"
+      versionNameSuffix = "-wake-picker-test"
       signingConfigs.findByName("debugConfig")?.let {
         signingConfig = it
       }

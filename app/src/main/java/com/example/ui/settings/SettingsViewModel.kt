@@ -20,6 +20,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setRequirePinOnOpen(on: Boolean) = c.settings.update { it.copy(requirePinOnOpen = on) }
     fun setChildMode(on: Boolean) = c.settings.update { it.copy(childMode = on) }
     fun setBlackoutEnabled(on: Boolean) = c.settings.update { it.copy(blackoutEnabled = on) }
+    fun setPlaySessionEnabled(on: Boolean) = c.settings.update {
+        it.copy(playSessionEnabled = on)
+    }
+    /** Only call after a successful parent-PIN confirmation in SettingsScreen. */
+    fun resetPlaySession() = c.settings.resetPlaySession()
     fun changeBlackoutLimit(delta: Int) = c.settings.update {
         it.copy(blackoutLimitMinutes = (it.blackoutLimitMinutes + delta).coerceIn(SettingsStore.MIN_BLACKOUT, SettingsStore.MAX_BLACKOUT))
     }

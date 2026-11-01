@@ -1,6 +1,7 @@
 package com.example.enforcement
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.BroadcastReceiver
@@ -34,8 +35,8 @@ class DetoxAccessibilityService : AccessibilityService() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_SCREEN_OFF || intent.action == Intent.ACTION_SCREEN_ON) {
                 container.settings.prepareNextPlaySession()
-                requestEvaluate()
             }
+            requestEvaluate()
         }
     }
 
@@ -55,6 +56,7 @@ class DetoxAccessibilityService : AccessibilityService() {
             registerReceiver(screenReceiver, IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_OFF)
                 addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
             })
             screenReceiverRegistered = true
         }
@@ -165,6 +167,10 @@ class DetoxAccessibilityService : AccessibilityService() {
     }
 
     private fun apply(decision: Decision) {
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            overlay?.hide()
+            return
+        }
         when (decision) {
             Decision.None -> overlay?.hide()
             is Decision.BlockApp, is Decision.LockDevice, Decision.ChoosePlayTime -> overlay?.show(decision)

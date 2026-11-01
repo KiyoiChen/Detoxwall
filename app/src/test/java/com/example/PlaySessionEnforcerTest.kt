@@ -1,7 +1,6 @@
 package com.example
 
 import com.example.data.Settings
-import com.example.enforcement.BlockReason
 import com.example.enforcement.Decision
 import com.example.enforcement.EnforcementInput
 import com.example.enforcement.Enforcer
@@ -35,15 +34,17 @@ class PlaySessionEnforcerTest {
         countedTotalMinutes = 0,
         protectedSurface = null,
         emergencyPackages = setOf("com.android.dialer"),
-        sessionEntryPackages = setOf("com.example.detoxwall", "com.launcher", "com.android.dialer"),
     )
 
-    @Test fun cannotPlayBeforeSelectingRound() {
-        assertEquals(
-            Decision.BlockApp("com.example.game", BlockReason.PLAY_NOT_STARTED),
-            Enforcer.decide(input(now = 100L, endAt = 0L)),
-        )
-        assertEquals(Decision.None, Enforcer.decide(input(100L, 0L, "com.example.detoxwall")))
+    @Test fun pickerCoversEveryAppIncludingLauncherAndDetoxWall() {
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(now = 100L, endAt = 0L)))
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(100L, 0L, "com.launcher")))
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(100L, 0L, "com.example.detoxwall")))
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(100L, 0L, foreground = "")))
+    }
+
+    @Test fun parentMaintenanceTemporarilyHidesPicker() {
+        assertEquals(Decision.None, Enforcer.decide(input(100L, 0L, maintenance = 5000L)))
     }
 
     @Test fun expiryLocksWholeDeviceAtDeadline() {

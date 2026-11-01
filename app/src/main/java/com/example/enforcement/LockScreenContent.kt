@@ -2,6 +2,7 @@ package com.example.enforcement
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.security.PinManager
+import com.example.data.PlaySessionPolicy
 import com.example.security.PinResult
 import com.example.ui.components.PinPad
 import kotlinx.coroutines.launch
@@ -42,6 +44,7 @@ fun LockScreenContent(
     onCloseApp: () -> Unit,
     onEmergency: () -> Unit,
     onParentUnlock: () -> Unit,
+    onStartRound: (Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var askingPin by remember(decision) { mutableStateOf(false) }
@@ -51,6 +54,7 @@ fun LockScreenContent(
     var busy by remember { mutableStateOf(false) }
 
     val (title, body) = when (decision) {
+        Decision.ChoosePlayTime -> "🎮 遊戲時間小管家" to "這一輪想玩幾分鐘？先選時間才能使用手機。"
         is Decision.BlockApp -> {
             val label = appLabel(decision.packageName)
             when (decision.reason) {
@@ -65,7 +69,7 @@ fun LockScreenContent(
             LockReason.ALLOWANCE -> "Today's screen time is used up."
             LockReason.SCHEDULE -> "Locked during \"${decision.detail}\"."
             LockReason.MANUAL -> "Locked by a parent."
-            LockReason.PLAY_SESSION -> "Play time is over. Ask a parent to unlock."
+            LockReason.PLAY_SESSION -> "這一輪結束了！請關閉螢幕；下次亮屏再選遊戲時間。"
         }
         else -> "" to ""
     }
@@ -111,6 +115,28 @@ fun LockScreenContent(
                 )
                 TextButton(onClick = { askingPin = false }) { Text("Cancel") }
             } else when (decision) {
+                Decision.ChoosePlayTime -> {
+                    PlaySessionPolicy.optionsMinutes.chunked(2).forEach { group ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            group.forEach { minutes ->
+                                Button(onClick = { onStartRound(minutes) }, modifier = Modifier.weight(1f).height(58.dp)) {
+                                    Text("$minutes 分鐘")
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    Text(
+                        "選定後才能進入遊戲；時間到必須先關閉螢幕才能選下一輪。",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { askingPin = true }) { Text("家長管理（PIN）") }
+                    OutlinedButton(onClick = onEmergency, modifier = Modifier.fillMaxWidth()) {
+                        Text("緊急電話")
+                    }
+                }
                 is Decision.BlockApp -> {
                     Button(onClick = onCloseApp, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                         Text("Close ${appLabel(decision.packageName)}")

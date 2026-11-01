@@ -20,6 +20,24 @@ class PlaySessionPolicyTest {
         assertEquals(PlaySessionState.EXPIRED, PlaySessionPolicy.state(true, 1000L, 2000L))
     }
 
+    @Test fun expiredSessionResetsOnScreenWakeButNotEarlier() {
+        org.junit.Assert.assertFalse(
+            PlaySessionPolicy.resetOnScreenTransition(true, 1000L, 999L, false)
+        )
+        org.junit.Assert.assertTrue(
+            PlaySessionPolicy.resetOnScreenTransition(true, 1000L, 1000L, false)
+        )
+        org.junit.Assert.assertTrue(
+            PlaySessionPolicy.resetOnScreenTransition(true, 1000L, 5000L, false)
+        )
+        org.junit.Assert.assertFalse(
+            PlaySessionPolicy.resetOnScreenTransition(true, 1000L, 5000L, true)
+        )
+        org.junit.Assert.assertFalse(
+            PlaySessionPolicy.resetOnScreenTransition(false, 1000L, 5000L, false)
+        )
+    }
+
     @Test fun modeDoesNotStartWithoutParentEnablingIt() {
         assertEquals(PlaySessionState.DISABLED, PlaySessionPolicy.state(false, 1000L, 2000L))
     }

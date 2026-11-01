@@ -2,6 +2,9 @@ package com.example.enforcement
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.MainActivity
@@ -25,6 +28,16 @@ import java.time.LocalDateTime
 class DetoxAccessibilityService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var overlay: LockOverlay? = null
+    private var screenReceiverRegistered = false
+    /** Android screen-on/off is delivered while the accessibility service is alive. */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_OFF || intent.action == Intent.ACTION_SCREEN_ON) {
+                container.settings.prepareNextPlaySession()
+                requestEvaluate()
+            }
+        }
+    }
 
     private var foreground: String? = null
     private var protectedSurface: SurfaceKind? = null
@@ -38,6 +51,13 @@ class DetoxAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         val c = container
+        if (!screenReceiverRegistered) {
+            registerReceiver(screenReceiver, IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            })
+            screenReceiverRegistered = true
+        }
         overlay = LockOverlay(this) { decision ->
             DetoxTheme(mode = c.settings.current.themeMode) {
                 LockScreenContent(
@@ -49,6 +69,9 @@ class DetoxAccessibilityService : AccessibilityService() {
                         runCatching { startActivity(Intent(Intent.ACTION_DIAL).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     },
                     onParentUnlock = { parentUnlock(decision) },
+                    onStartRound = { minutes ->
+                        if (c.settings.startPlaySession(minutes)) requestEvaluate()
+                    },
                 )
             }
         }
@@ -86,6 +109,10 @@ class DetoxAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        if (screenReceiverRegistered) {
+            unregisterReceiver(screenReceiver)
+            screenReceiverRegistered = false
+        }
         scope.cancel()
         overlay?.destroy()
         overlay = null
@@ -133,8 +160,6 @@ class DetoxAccessibilityService : AccessibilityService() {
                 countedTotalMinutes = c.usageReader.countedTotalMinutes(usageCache),
                 protectedSurface = protectedSurface,
                 emergencyPackages = setOfNotNull(c.installedApps.defaultDialer()),
-                sessionEntryPackages = c.installedApps.launcherPackages() + packageName +
-                    setOfNotNull(c.installedApps.defaultDialer()),
             )
         )
     }
@@ -142,7 +167,7 @@ class DetoxAccessibilityService : AccessibilityService() {
     private fun apply(decision: Decision) {
         when (decision) {
             Decision.None -> overlay?.hide()
-            is Decision.BlockApp, is Decision.LockDevice -> overlay?.show(decision)
+            is Decision.BlockApp, is Decision.LockDevice, Decision.ChoosePlayTime -> overlay?.show(decision)
             is Decision.Tamper -> {
                 overlay?.hide()
                 protectedSurface = null
@@ -162,7 +187,7 @@ class DetoxAccessibilityService : AccessibilityService() {
         val settings = container.settings
         when (decision) {
             is Decision.BlockApp -> settings.addGrant(decision.packageName, PARENT_EXTRA_MINUTES)
-            is Decision.LockDevice -> settings.update {
+            is Decision.LockDevice, Decision.ChoosePlayTime -> settings.update {
                 it.copy(maintenanceUntil = System.currentTimeMillis() + PARENT_EXTRA_MINUTES * 60_000L)
             }
             else -> Unit

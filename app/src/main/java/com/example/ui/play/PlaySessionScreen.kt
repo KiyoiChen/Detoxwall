@@ -26,17 +26,19 @@ import com.example.data.PlaySessionPolicy
 import com.example.data.PlaySessionState
 import com.example.data.Settings
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 @Composable
-fun PlaySessionScreen(settings: Settings, onStart: (Int) -> Unit, onParent: () -> Unit) {
+fun PlaySessionScreen(settings: Settings, onStart: (Int) -> Unit, onParent: () -> Unit, onEndParent: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(settings.playSessionEndAt) {
+    LaunchedEffect(Unit) {
         while (true) {
             now = System.currentTimeMillis()
-            delay(1_000)
+            delay(1_000L)
         }
     }
-    val state = PlaySessionPolicy.state(settings.playSessionEnabled, settings.playSessionEndAt, now)
+    val today = LocalDate.now().toString()
+    val state = PlaySessionPolicy.state(settings, now, today)
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -44,11 +46,18 @@ fun PlaySessionScreen(settings: Settings, onStart: (Int) -> Unit, onParent: () -
     ) {
         Text("遊戲時間小管家", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(18.dp))
-        when (state) {
+        if (settings.isMaintenance(now)) {
+            Text("家長暫時使用中", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(12.dp))
+            Text("用完請點結束；系統會回到休息倒數或下一輪選時間畫面。", textAlign = TextAlign.Center)
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = onEndParent, modifier = Modifier.fillMaxWidth()) { Text("結束家長模式") }
+        } else when (state) {
             PlaySessionState.READY -> {
                 Text("這次想玩幾分鐘？", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(24.dp))
-                PlaySessionPolicy.optionsMinutes.chunked(2).forEach { group ->
+                Text("今天還有 ${PlaySessionPolicy.remainingToday(settings, today)} 分鐘", textAlign = TextAlign.Center)
+                Spacer(Modifier.height(20.dp))
+                PlaySessionPolicy.choices(settings, today).chunked(2).forEach { group ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         group.forEach { minutes ->
                             Button(onClick = { onStart(minutes) }) { Text("$minutes 分鐘") }
@@ -56,23 +65,27 @@ fun PlaySessionScreen(settings: Settings, onStart: (Int) -> Unit, onParent: () -
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-                Text("選完就開始；時間到先關閉螢幕，再亮屏可選下一輪。", textAlign = TextAlign.Center)
             }
             PlaySessionState.RUNNING -> {
                 val seconds = ((settings.playSessionEndAt - now).coerceAtLeast(0L) + 999L) / 1000L
-                Text("還能玩", style = MaterialTheme.typography.titleLarge)
+                Text("本輪剩餘", style = MaterialTheme.typography.titleLarge)
                 Text("%02d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.displayLarge)
-                Text("按手機 Home 鍵返回桌面，開始玩吧！", textAlign = TextAlign.Center)
             }
-            PlaySessionState.EXPIRED -> {
-                Text("時間到了！", style = MaterialTheme.typography.headlineSmall)
-                Text("關閉螢幕，再次亮屏後可以選擇下一輪。", textAlign = TextAlign.Center)
+            PlaySessionState.RESTING -> {
+                val seconds = ((settings.playRestEndAt - now).coerceAtLeast(0L) + 999L) / 1000L
+                Text("休息時間", style = MaterialTheme.typography.titleLarge)
+                Text("%02d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.displayLarge)
+                Text("休息完自動開放下一輪，不需要家長重設。", textAlign = TextAlign.Center)
             }
-            PlaySessionState.DISABLED -> Text("請由家長開啟遊戲回合功能。")
+            PlaySessionState.DAILY_LIMIT ->
+                Text("今天的遊戲時間已用完，明天再玩！", textAlign = TextAlign.Center)
+            PlaySessionState.DISABLED -> Text("請先由家長開啟單次遊戲功能。")
         }
-        Spacer(Modifier.height(36.dp))
-        OutlinedButton(onClick = onParent, modifier = Modifier.fillMaxWidth()) {
-            Text("家長管理（需要密碼）")
+        if (!settings.isMaintenance(now)) {
+            Spacer(Modifier.height(36.dp))
+            OutlinedButton(onClick = onParent, modifier = Modifier.fillMaxWidth()) {
+                Text("家長管理（需要 PIN）")
+            }
         }
     }
 }

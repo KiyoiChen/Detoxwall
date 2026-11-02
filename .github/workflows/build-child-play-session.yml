@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/child-play-session
+      - feature/rest-break-parent-mode
   workflow_dispatch:
 
 concurrency:
@@ -57,7 +58,7 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "Child Timer Android test (${SHORT})" \
-              --notes "Experimental ROG Phone 1 play timer: full-screen picker before apps, 5/10/15/30-minute sessions, lock on expiry, screen off/on to begin the next round without a parent PIN. NOT real-device validated. Debug APK can update prior ChildTimer debug install only if its signing key matches, and can coexist with original DetoxWall. Keep only one accessibility service enabled." \
+              --notes "Experimental ROG Phone 1 ChildTimer Rest Mode. Picker -> chosen time -> automatic 30-minute rest -> picker, 60-minute daily quota, parent PIN offers temporary 15-min access or skip rest. Parents can end temporary mode via persistent notification. NOT real-device validated. Distinct childtimer3 application ID: install alongside old versions, enable only one accessibility service." \
               --prerelease
           fi
           echo "Public APK: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET}"

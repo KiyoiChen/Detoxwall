@@ -30,6 +30,11 @@ data class Settings(
     val maintenanceUntil: Long = 0L,
     val playSessionEnabled: Boolean = false,
     val playSessionEndAt: Long = 0L,
+    val playRestEndAt: Long = 0L,
+    val playRestMinutes: Int = 30,
+    val playDailyLimitMinutes: Int = 60,
+    val playDailyUsedMinutes: Int = 0,
+    val playDailyDate: String = "",
     /** In-memory counter bumped when per-day grants change so collectors re-evaluate. */
     val revision: Int = 0,
 ) {
@@ -58,30 +63,45 @@ class SettingsStore(context: Context) {
         _settings.value = next
     }
 
-    /** Only one round can be running at once. Screen wake resets expired rounds. */
-    fun startPlaySession(minutes: Int, now: Long = System.currentTimeMillis()): Boolean {
+    /**
+     * Book one child round against today's allowance. No parent reset is required:
+     * READY is derived after the persisted rest deadline expires.
+     */
+    fun startPlaySession(minutes: Int, now: Long = System.currentTimeMillis(), day: String = today()): Boolean {
         if (minutes !in PlaySessionPolicy.optionsMinutes) return false
         var started = false
         update { previous ->
-            if (!previous.childMode || !previous.playSessionEnabled || previous.playSessionEndAt != 0L) previous
+            if (previous.isMaintenance(now) ||
+                PlaySessionPolicy.state(previous, now, day) != PlaySessionState.READY ||
+                minutes > PlaySessionPolicy.remainingToday(previous, day)
+            ) previous
             else {
+                val endAt = PlaySessionPolicy.deadline(now, minutes)
                 started = true
-                previous.copy(playSessionEndAt = PlaySessionPolicy.deadline(now, minutes))
+                previous.copy(
+                    playSessionEndAt = endAt,
+                    playRestEndAt = endAt + previous.playRestMinutes * 60_000L,
+                    playDailyDate = day,
+                    playDailyUsedMinutes = PlaySessionPolicy.usedToday(previous, day) + minutes,
+                )
             }
         }
         return started
     }
 
-    fun resetPlaySession() = update { it.copy(playSessionEndAt = 0L, maintenanceUntil = 0L) }
+    /** Explicit parent override leaves today's booked minutes untouched. */
+    fun resetPlaySession() = update {
+        it.copy(playSessionEndAt = 0L, playRestEndAt = 0L, maintenanceUntil = 0L)
+    }
 
-    /** Reset only an expired round; called from screen-off/screen-on notifications. */
-    fun prepareNextPlaySession(now: Long = System.currentTimeMillis()) {
-        update {
-            if (it.childMode && PlaySessionPolicy.resetOnScreenTransition(
-                    it.playSessionEnabled, it.playSessionEndAt, now, it.isMaintenance(now)
-                )
-            ) it.copy(playSessionEndAt = 0L) else it
-        }
+    fun startParentUse(now: Long = System.currentTimeMillis()) = update {
+        it.copy(maintenanceUntil = now + 15 * 60_000L)
+    }
+
+    fun endParentUse() = update { it.copy(maintenanceUntil = 0L) }
+
+    fun skipRestByParent() = update {
+        it.copy(playSessionEndAt = 0L, playRestEndAt = 0L, maintenanceUntil = 0L)
     }
 
     // ── Per-day extra time & snoozes ─────────────────────────────────────────
@@ -133,6 +153,11 @@ class SettingsStore(context: Context) {
         maintenanceUntil = prefs.getLong("maintenance_until", 0L),
         playSessionEnabled = prefs.getBoolean("play_session_enabled", false),
         playSessionEndAt = prefs.getLong("play_session_end_at", 0L),
+        playRestEndAt = prefs.getLong("play_rest_end_at", 0L),
+        playRestMinutes = prefs.getInt("play_rest_minutes", 30).coerceIn(5, 120),
+        playDailyLimitMinutes = prefs.getInt("play_daily_limit_minutes", 60).coerceIn(5, 300),
+        playDailyUsedMinutes = prefs.getInt("play_daily_used_minutes", 0).coerceAtLeast(0),
+        playDailyDate = prefs.getString("play_daily_date", "") ?: "",
     )
 
     private fun write(s: Settings) = prefs.edit(commit = true) {
@@ -153,6 +178,11 @@ class SettingsStore(context: Context) {
         putLong("maintenance_until", s.maintenanceUntil)
         putBoolean("play_session_enabled", s.playSessionEnabled)
         putLong("play_session_end_at", s.playSessionEndAt)
+        putLong("play_rest_end_at", s.playRestEndAt)
+        putInt("play_rest_minutes", s.playRestMinutes.coerceIn(5, 120))
+        putInt("play_daily_limit_minutes", s.playDailyLimitMinutes.coerceIn(5, 300))
+        putInt("play_daily_used_minutes", s.playDailyUsedMinutes.coerceAtLeast(0))
+        putString("play_daily_date", s.playDailyDate)
     }
 
     companion object {

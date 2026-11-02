@@ -103,18 +103,41 @@ fun SettingsScreen(viewModel: SettingsViewModel, contentPadding: PaddingValues, 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("讓孩子選擇單次遊戲時間", style = MaterialTheme.typography.bodyMedium)
-                            Text("時間到先鎖定；關螢幕再亮屏可選下一輪。",
+                            Text("時間到強制休息，休息結束自動選下一輪。",
                                 style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(checked = settings.playSessionEnabled,
                             onCheckedChange = viewModel::setPlaySessionEnabled)
                     }
                     if (settings.playSessionEnabled) {
-                        TextButton(onClick = { confirmPlayReset = true }) {
-                            Text("家長：重設遊戲回合")
+                        Spacer(Modifier.height(10.dp))
+                        Text("每輪後強制休息", style = MaterialTheme.typography.titleSmall)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { viewModel.changeRestMinutes(-15) }) { Text("−15") }
+                            Text(
+                                "休息 ${settings.playRestMinutes} 分鐘",
+                                style = MaterialTheme.typography.titleSmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { viewModel.changeRestMinutes(15) }) { Text("+15") }
                         }
-                        Text("如有需要，調高每日螢幕上限，以免提前鎖機。",
-                            style = MaterialTheme.typography.bodySmall)
+                        Text("每日遊戲總額", style = MaterialTheme.typography.titleSmall)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { viewModel.changeDailyPlayLimit(-15) }) { Text("−15") }
+                            Text(
+                                "每天 ${settings.playDailyLimitMinutes} 分鐘",
+                                style = MaterialTheme.typography.titleSmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { viewModel.changeDailyPlayLimit(15) }) { Text("+15") }
+                        }
+                        Text(
+                            "孩子的遊戲回合自動開放；家長使用不會重設今日額度。",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        TextButton(onClick = { confirmPlayReset = true }) { Text("家長：立即開放新一輪") }
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {

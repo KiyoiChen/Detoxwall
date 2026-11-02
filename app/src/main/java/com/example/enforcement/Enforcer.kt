@@ -70,6 +70,9 @@ object Enforcer {
             }
         }
 
+        // A verified parent can use the device without child app limits for at most 15 minutes.
+        if (settings.isMaintenance(now)) return Decision.None
+
         // Existing per-app blocking policy.
         val pkg = foreground ?: return Decision.None
         val limit = limits[pkg]?.takeIf { it.enabled } ?: return Decision.None

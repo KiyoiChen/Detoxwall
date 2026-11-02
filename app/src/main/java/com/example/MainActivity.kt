@@ -120,6 +120,10 @@ class MainActivity : ComponentActivity() {
                     settings = appSettings,
                     onStart = { minutes -> settings.startPlaySession(minutes) },
                     onParent = { parentRequested.value = true },
+                    onEndParent = {
+                        settings.endParentUse()
+                        GuardianService.start(this@MainActivity)
+                    },
                 )
                 Root.MAIN -> Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,

@@ -1,47 +1,51 @@
-# Child-selected one-time play session — DetoxWall fork
+# DetoxWall — automatic rest and parent temporary-use MVP
 
-Feature branch: `feature/child-play-session`. Existing DetoxWall child mode, parent PIN and accessibility lock remain in place. This iteration adds a forced accessibility-overlay picker after screen wake.
+Branch: `feature/rest-break-parent-mode` (independent of `main` and the previously working `feature/child-play-session`).
 
-## Usage
+## Child flow (no manual reset)
 
-1. Parent installs the custom build, configures PIN and accessibility + usage permissions.
-2. Parent enables **Child Mode** and the new **讓孩子選擇單次遊戲時間** toggle in Settings.
-3. Child sees a full-screen **5 / 10 / 15 / 30-minute picker** covering whichever app is open, including the launcher, and selects a round. It can also appear immediately after activating Child Mode.
-4. The choice saves a fixed deadline to device settings and survives app restarts. Switching apps does not restart the round.
-5. Until a duration is chosen, the accessibility overlay blocks access to the launcher, DetoxWall and ordinary apps. Emergency dialer remains accessible; parent PIN temporarily opens maintenance mode.
-6. After the deadline, DetoxWall uses its existing **whole-device accessibility lock**. The child must switch the screen off and on again; an expired round is then reset to READY, displaying the picker above the foreground app (normally after system unlock).
-7. No parent PIN is needed for each normal round. Parent PIN still temporarily unlocks the phone for 15 minutes and grants access to settings. A parent may also explicitly reset the round.
+1. Child Mode and play sessions enabled, parent PIN set, accessibility service enabled.
+2. On screen wake (after Android keyguard), an accessibility overlay requires choosing 5 / 10 / 15 / 30 minutes before using the phone.
+3. A fixed deadline is saved; the round continues counting even if apps or the screen are switched off.
+4. At round end, a **30-minute rest** starts. The full-screen overlay stays visible during rest, with a countdown and an emergency dialer button. Screen off/on cannot reset the rest timer.
+5. When rest ends, the time-picker automatically returns on screen wake or the next enforcement check. No parent action required.
+6. Daily **60-minute gaming allowance** is separate from DetoxWall's optional generic screen-time limit. Choosing a round **books its full chosen duration** against today's allowance.
+7. When remaining daily allowance is less than five minutes, no more choices are available. It resets when the phone's local date changes.
 
-## IMPORTANT
+## Parent interruption during rest
 
-- This is an experimental MVP, **not yet compiled or real-device tested** on ROG Phone 1.
-- Time is counted from tapping the duration, including time with the screen off. It is not gaming-foreground-only time.
-- The picker is a full-screen accessibility overlay, not a true Android device-owner lock; Android system keyguard, battery restrictions and OEM gestures may behave differently. Verify screen-off/on and Home/Back/Recents on the physical ROG Phone 1.
-- The existing **daily screen time** limit may lock the phone early; configure it accordingly.
-- Accessibility blocking isn't a system-level, tamper-proof child control. Keep a backup emergency access plan.
-- Emergency dialer remains exempt.
-- Do not assume the original APK can be updated in place: signing keys may differ, requiring uninstall and reinstall. Uninstalling erases app settings.
-- Do not merge into main or rely on this as a family safety control until verified.
+- Enter parent PIN in the rest overlay to see TWO options:
+  - **Temporary parent use (15 minutes)**: grants parent access; the original rest deadline keeps running and daily gaming budget does not reset. A notification has **結束家長模式**, and the app also shows an End Parent Mode button. On exit or the 15-minute expiry the normal rest/picker/daily lock resumes automatically.
+  - **End rest early**: immediately open the next picker, but still subject to daily limit.
+- PIN verification is required; missing PIN cannot be used to bypass the lock.
+- Emergency dialer remains accessible without parent PIN.
 
-## Local verification
+## Parent setup
+- Child Mode ON, 讓孩子選擇單次遊戲時間 ON.
+- In Settings, change rest duration (default 30min) and daily gaming cap (default 60min).
+- Enabling the new play-session setting turns off the old generic daily screen quota to avoid two independent counters unexpectedly locking the phone. Parent can re-enable it if desired.
+- The old manual parent reset remains an explicit override, not part of routine use.
 
+## Important limitations
+- The Android accessibility overlay is not a tamper-proof Device Owner or true system lock. ROG Phone 1 has not been real-device tested with this branch. Verify Home/Back/Recents, emergency calls, battery optimizations, and reboot.
+- Parent notification actions require notifications to remain enabled.
+- System clock changes can affect wall-clock deadlines; confirm Android date/time is automatic.
+- If the phone is rebooted, the persisted deadlines remain, but the accessibility service must restart.
+- Test APK uses a NEW debug application ID suffix `.childtimer3`, so it can coexist with the previously installed `.childtimer2` test. Enable **only one** accessibility service at a time.
+- As with the previous version, parent PIN and daily settings are stored locally.
+
+## Build and test
 ```bash
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
+./gradlew testDebugUnitTest assembleDebug
 ```
 
-Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
-
-## ROG Phone 1 manual checks
-
-- [ ] Settings + PIN are configured before Child Mode is enabled
-- [ ] Opening games without selecting minutes is blocked
-- [ ] Selection of 5 minutes works and starts a countdown
-- [ ] Opening other apps cannot restart the round
-- [ ] At the deadline, Home, Back, Recent apps cannot dismiss the lock
-- [ ] Reboot retains an expired lock
-- [ ] Parent PIN grants temporary access but doesn't reset a completed round
-- [ ] Next screen-off/on after expiration automatically shows picker, without parent PIN
-- [ ] Child cannot reach launcher, settings, notification-shade games or other apps before choosing
-- [ ] Parent PIN is still required to enter settings or explicitly reset a round
-- [ ] Emergency dialer remains accessible
+## Device checks
+- [ ] Selecting the round starts a deadline and covers Home/Back/Recents before selection
+- [ ] At expiry full-screen rest appears without child input
+- [ ] Screen off/on or force-stopping the app does not reset 30-minute rest
+- [ ] Rest timeout automatically offers next duration
+- [ ] Parent PIN presents both choices; temporary use doesn't reset rest/daily budget
+- [ ] App/notification End Parent Mode action immediately restores child restrictions
+- [ ] Parent 15-minute temporary use automatically expires
+- [ ] Daily 60-minute quota locks all games for the day; midnight reopens
+- [ ] Android lock screen, emergency dialer and device reset paths remain usable

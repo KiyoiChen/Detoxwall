@@ -13,37 +13,47 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.container
 
-/** Sticky foreground service that keeps the app process alive so enforcement isn't killed. */
+/** Foreground notification lets a verified parent END temporary access at any time. */
 class GuardianService : Service() {
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_END_PARENT) container.settings.endParentUse()
+        val parentActive = container.settings.current.isMaintenance(System.currentTimeMillis())
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, getString(R.string.guardian_channel_name), NotificationManager.IMPORTANCE_LOW)
                 .apply { description = getString(R.string.guardian_channel_description) }
         )
         val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = NotificationCompat.Builder(this, CHANNEL)
+        val builder = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-            .setContentTitle("DetoxWall protection is on")
-            .setContentText("Limits and schedules are being enforced.")
+            .setContentTitle(if (parentActive) "家長暫時使用中" else "DetoxWall 保護中")
+            .setContentText(if (parentActive) "用完請按「結束家長模式」；最多 15 分鐘。" else "孩子遊戲計時與休息限制啟用中。")
             .setOngoing(true)
             .setContentIntent(open)
-            .build()
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+
+        if (parentActive) {
+            val end = PendingIntent.getService(
+                this, 1,
+                Intent(this, GuardianService::class.java).setAction(ACTION_END_PARENT),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.addAction(android.R.drawable.ic_lock_idle_lock, "結束家長模式", end)
+        }
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, builder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         return START_STICKY
     }
 
     companion object {
+        const val ACTION_END_PARENT = "com.example.enforcement.END_PARENT_USE"
         private const val CHANNEL = "guardian"
         private const val NOTIFICATION_ID = 1
 
-        /** Safe to call repeatedly; ignored if Android refuses a background start. */
         fun start(context: Context) {
             runCatching { ContextCompat.startForegroundService(context, Intent(context, GuardianService::class.java)) }
         }

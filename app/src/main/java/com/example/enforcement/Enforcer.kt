@@ -6,7 +6,7 @@ import com.example.data.Settings
 import com.example.data.PlaySessionPolicy
 import com.example.data.PlaySessionState
 
-enum class LockReason { MANUAL, ALLOWANCE, SCHEDULE, PLAY_SESSION }
+enum class LockReason { MANUAL, ALLOWANCE, SCHEDULE, REST, DAILY_PLAY }
 enum class BlockReason { FOCUS, SCHEDULE, LIMIT, PLAY_NOT_STARTED }
 enum class SurfaceKind { SETTINGS, UNINSTALL }
 
@@ -61,8 +61,9 @@ object Enforcer {
                 return Decision.LockDevice(LockReason.ALLOWANCE)
             }
             if (settings.playSessionEnabled) {
-                when (PlaySessionPolicy.state(true, settings.playSessionEndAt, now)) {
-                    PlaySessionState.EXPIRED -> return Decision.LockDevice(LockReason.PLAY_SESSION)
+                when (PlaySessionPolicy.state(settings, now, today)) {
+                    PlaySessionState.DAILY_LIMIT -> return Decision.LockDevice(LockReason.DAILY_PLAY)
+                    PlaySessionState.RESTING -> return Decision.LockDevice(LockReason.REST)
                     PlaySessionState.READY -> return Decision.ChoosePlayTime
                     else -> Unit
                 }

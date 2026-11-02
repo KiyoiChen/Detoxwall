@@ -19,6 +19,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,23 +33,33 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.security.PinManager
 import com.example.data.PlaySessionPolicy
+import com.example.data.Settings
 import com.example.security.PinResult
 import com.example.ui.components.PinPad
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 /** What the lock overlay shows for a [Decision.BlockApp] or [Decision.LockDevice]. */
 @Composable
 fun LockScreenContent(
     decision: Decision,
+    settings: Settings,
     appLabel: (String) -> String,
     pinManager: PinManager,
     onCloseApp: () -> Unit,
     onEmergency: () -> Unit,
-    onParentUnlock: () -> Unit,
+    onParentUse: () -> Unit,
+    onParentSkipRest: () -> Unit,
     onStartRound: (Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var askingPin by remember(decision) { mutableStateOf(false) }
+    var authorized by remember(decision) { mutableStateOf(false) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(decision) { while (true) { now = System.currentTimeMillis(); delay(1_000L) } }
+    val today = LocalDate.now().toString()
+    val restSeconds = ((settings.playRestEndAt - now).coerceAtLeast(0L) + 999L) / 1000L
     var entry by remember(decision) { mutableStateOf("") }
     var message by remember(decision) { mutableStateOf<String?>(null) }
     var errorKey by remember { mutableIntStateOf(0) }
@@ -69,7 +81,8 @@ fun LockScreenContent(
             LockReason.ALLOWANCE -> "Today's screen time is used up."
             LockReason.SCHEDULE -> "Locked during \"${decision.detail}\"."
             LockReason.MANUAL -> "Locked by a parent."
-            LockReason.PLAY_SESSION -> "這一輪結束了！請關閉螢幕；下次亮屏再選遊戲時間。"
+            LockReason.REST -> "休息倒數 %02d:%02d，結束後會自動開放下一輪。".format(restSeconds / 60, restSeconds % 60)
+            LockReason.DAILY_PLAY -> "今天的遊戲時間已用完，明天自動恢復。"
         }
         else -> "" to ""
     }
@@ -92,7 +105,20 @@ fun LockScreenContent(
             )
             Spacer(Modifier.height(32.dp))
 
-            if (askingPin) {
+            if (authorized) {
+                Text("家長管理", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onParentUse, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Text("暫時解鎖給家長使用（15 分鐘）")
+                }
+                if (decision is Decision.LockDevice && decision.reason == LockReason.REST) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(onClick = onParentSkipRest, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                        Text("提前結束休息，讓孩子選下一輪")
+                    }
+                }
+                TextButton(onClick = { authorized = false }) { Text("取消") }
+            } else if (askingPin) {
                 PinPad(
                     value = entry,
                     errorKey = errorKey,
@@ -104,7 +130,8 @@ fun LockScreenContent(
                             busy = true
                             scope.launch {
                                 when (val r = pinManager.verify(value)) {
-                                    PinResult.Success, PinResult.NotSet -> onParentUnlock()
+                                    PinResult.Success -> { authorized = true; askingPin = false; entry = "" }
+                                    PinResult.NotSet -> { message = "家長 PIN 尚未設定"; entry = ""; errorKey++ }
                                     is PinResult.Wrong -> { message = "Wrong PIN. ${r.attemptsLeft} tries left."; entry = ""; errorKey++ }
                                     is PinResult.LockedOut -> { message = "Too many tries. Wait ${(r.remainingMs + 999) / 1000} s."; entry = ""; errorKey++ }
                                 }
@@ -116,7 +143,9 @@ fun LockScreenContent(
                 TextButton(onClick = { askingPin = false }) { Text("Cancel") }
             } else when (decision) {
                 Decision.ChoosePlayTime -> {
-                    PlaySessionPolicy.optionsMinutes.chunked(2).forEach { group ->
+                    Text("今日剩餘 ${PlaySessionPolicy.remainingToday(settings, today)} 分鐘")
+                    Spacer(Modifier.height(12.dp))
+                    PlaySessionPolicy.choices(settings, today).chunked(2).forEach { group ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             group.forEach { minutes ->
                                 Button(onClick = { onStartRound(minutes) }, modifier = Modifier.weight(1f).height(58.dp)) {
@@ -127,7 +156,7 @@ fun LockScreenContent(
                         Spacer(Modifier.height(12.dp))
                     }
                     Text(
-                        "選定後才能進入遊戲；時間到必須先關閉螢幕才能選下一輪。",
+                        "時間到會自動休息 ${settings.playRestMinutes} 分鐘，不用家長重設。",
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -147,7 +176,7 @@ fun LockScreenContent(
                 }
                 is Decision.LockDevice -> {
                     Button(onClick = { askingPin = true }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                        Text("Parent unlock (15 min)")
+                        Text("家長解鎖（PIN）")
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onEmergency, modifier = Modifier.fillMaxWidth()) { Text("Emergency call") }

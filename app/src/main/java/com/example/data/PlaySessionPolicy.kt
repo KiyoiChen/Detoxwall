@@ -1,25 +1,27 @@
 package com.example.data
 
-/** A round runs to its deadline. After expiration, screen off/on opens the next picker. */
-enum class PlaySessionState { DISABLED, READY, RUNNING, EXPIRED }
+/** Actual state is derived from persisted deadlines; changing apps or rebooting does not reset timers. */
+enum class PlaySessionState { DISABLED, READY, RUNNING, RESTING, DAILY_LIMIT }
 
 object PlaySessionPolicy {
     val optionsMinutes = listOf(5, 10, 15, 30)
 
-    fun state(enabled: Boolean, endAt: Long, now: Long): PlaySessionState = when {
-        !enabled -> PlaySessionState.DISABLED
-        endAt <= 0L -> PlaySessionState.READY
-        now < endAt -> PlaySessionState.RUNNING
-        else -> PlaySessionState.EXPIRED
-    }
+    fun usedToday(settings: Settings, today: String): Int =
+        if (settings.playDailyDate == today) settings.playDailyUsedMinutes.coerceAtLeast(0) else 0
 
-    /** Do not recycle a round before its deadline or during parent maintenance. */
-    fun resetOnScreenTransition(
-        enabled: Boolean,
-        endAt: Long,
-        now: Long,
-        parentMaintenance: Boolean,
-    ): Boolean = !parentMaintenance && state(enabled, endAt, now) == PlaySessionState.EXPIRED
+    fun remainingToday(settings: Settings, today: String): Int =
+        (settings.playDailyLimitMinutes - usedToday(settings, today)).coerceAtLeast(0)
+
+    fun choices(settings: Settings, today: String): List<Int> =
+        optionsMinutes.filter { it <= remainingToday(settings, today) }
+
+    fun state(settings: Settings, now: Long, today: String): PlaySessionState = when {
+        !settings.childMode || !settings.playSessionEnabled -> PlaySessionState.DISABLED
+        remainingToday(settings, today) == 0 -> PlaySessionState.DAILY_LIMIT
+        settings.playSessionEndAt > now -> PlaySessionState.RUNNING
+        settings.playRestEndAt > now -> PlaySessionState.RESTING
+        else -> PlaySessionState.READY
+    }
 
     fun deadline(now: Long, minutes: Int): Long {
         require(minutes in optionsMinutes) { "Unsupported play duration" }

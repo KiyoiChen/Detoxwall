@@ -11,62 +11,62 @@ import org.junit.Test
 class PlaySessionEnforcerTest {
     private fun input(
         now: Long,
-        endAt: Long,
+        endAt: Long = 0L,
+        restAt: Long = 0L,
+        used: Int = 0,
         foreground: String = "com.example.game",
         maintenance: Long = 0L,
+        day: String = "2026-11-02",
     ) = EnforcementInput(
-        now = now,
-        dayIndex = 0,
-        minuteOfDay = 600,
-        today = "2026-11-01",
+        now = now, dayIndex = 0, minuteOfDay = 600, today = day,
         foreground = foreground,
         settings = Settings(
-            childMode = true,
-            blackoutEnabled = false,
+            childMode = true, blackoutEnabled = false,
             playSessionEnabled = true,
-            playSessionEndAt = endAt,
+            playSessionEndAt = endAt, playRestEndAt = restAt,
+            playDailyUsedMinutes = used, playDailyDate = "2026-11-02",
             maintenanceUntil = maintenance,
         ),
-        limits = emptyMap(),
-        usageMinutes = emptyMap(),
-        grantedMinutes = emptyMap(),
-        schedules = emptyList(),
-        countedTotalMinutes = 0,
-        protectedSurface = null,
+        limits = emptyMap(), usageMinutes = emptyMap(), grantedMinutes = emptyMap(),
+        schedules = emptyList(), countedTotalMinutes = 0, protectedSurface = null,
         emergencyPackages = setOf("com.android.dialer"),
     )
 
-    @Test fun pickerCoversEveryAppIncludingLauncherAndDetoxWall() {
-        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(now = 100L, endAt = 0L)))
-        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(100L, 0L, "com.launcher")))
-        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(100L, 0L, "com.example.detoxwall")))
-        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(100L, 0L, foreground = "")))
+    @Test fun mustChooseBeforeUsingAnyApp() {
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(now = 100L)))
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(100L, foreground = "com.launcher")))
     }
 
-    @Test fun parentMaintenanceTemporarilyHidesPicker() {
-        assertEquals(Decision.None, Enforcer.decide(input(100L, 0L, maintenance = 5000L)))
-    }
-
-    @Test fun expiryLocksWholeDeviceAtDeadline() {
-        assertEquals(Decision.None, Enforcer.decide(input(now = 999L, endAt = 1000L)))
+    @Test fun playRestThenNewPickerWithoutParentReset() {
+        assertEquals(Decision.None, Enforcer.decide(input(999L, endAt = 1000L, restAt = 4000L, used = 15)))
         assertEquals(
-            Decision.LockDevice(LockReason.PLAY_SESSION),
-            Enforcer.decide(input(now = 1000L, endAt = 1000L)),
+            Decision.LockDevice(LockReason.REST),
+            Enforcer.decide(input(1000L, endAt = 1000L, restAt = 4000L, used = 15)),
         )
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(4000L, endAt = 1000L, restAt = 4000L, used = 15)))
     }
 
-    @Test fun temporaryParentUnlockDoesNotResetRound() {
-        assertEquals(Decision.None, Enforcer.decide(input(now = 1001L, endAt = 1000L, maintenance = 5000L)))
+    @Test fun dailyLimitOverridesAnyFurtherRestOrNewGame() {
         assertEquals(
-            Decision.LockDevice(LockReason.PLAY_SESSION),
-            Enforcer.decide(input(now = 5000L, endAt = 1000L, maintenance = 5000L)),
+            Decision.LockDevice(LockReason.DAILY_PLAY),
+            Enforcer.decide(input(1001L, endAt = 1000L, restAt = 9000L, used = 60)),
         )
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(1001L, used = 60, day = "2026-11-03")))
     }
 
-    @Test fun emergencyDialerRemainsAccessible() {
+    @Test fun parentTemporaryModeAllowsUseWithoutResettingTimers() {
+        assertEquals(Decision.None, Enforcer.decide(input(1500L, endAt = 1000L, restAt = 6000L, used = 15, maintenance = 5000L)))
+        assertEquals(
+            Decision.LockDevice(LockReason.REST),
+            Enforcer.decide(input(5000L, endAt = 1000L, restAt = 6000L, used = 15, maintenance = 5000L)),
+        )
+        assertEquals(Decision.ChoosePlayTime, Enforcer.decide(input(6000L, endAt = 1000L, restAt = 6000L, used = 15)))
+    }
+
+    @Test fun emergencyDialerIsExemptEvenDuringRestAndDailyLock() {
         assertEquals(
             Decision.None,
-            Enforcer.decide(input(now = 5000L, endAt = 1000L, foreground = "com.android.dialer")),
+            Enforcer.decide(input(now = 5000L, endAt = 1000L, restAt = 6000L, used = 60, foreground = "com.android.dialer")),
         )
     }
 }

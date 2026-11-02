@@ -17,8 +17,8 @@ object PlaySessionPolicy {
 
     fun state(settings: Settings, now: Long, today: String): PlaySessionState = when {
         !settings.childMode || !settings.playSessionEnabled -> PlaySessionState.DISABLED
-        remainingToday(settings, today) == 0 -> PlaySessionState.DAILY_LIMIT
         settings.playSessionEndAt > now -> PlaySessionState.RUNNING
+        remainingToday(settings, today) == 0 -> PlaySessionState.DAILY_LIMIT
         settings.playRestEndAt > now -> PlaySessionState.RESTING
         else -> PlaySessionState.READY
     }

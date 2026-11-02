@@ -21,7 +21,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setChildMode(on: Boolean) = c.settings.update { it.copy(childMode = on) }
     fun setBlackoutEnabled(on: Boolean) = c.settings.update { it.copy(blackoutEnabled = on) }
     fun setPlaySessionEnabled(on: Boolean) = c.settings.update {
-        it.copy(playSessionEnabled = on)
+        // The new gaming-only allowance replaces the generic daily screen cap by default.
+        it.copy(playSessionEnabled = on, blackoutEnabled = if (on) false else it.blackoutEnabled)
+    }
+    fun changeRestMinutes(delta: Int) = c.settings.update {
+        it.copy(playRestMinutes = (it.playRestMinutes + delta).coerceIn(5, 120))
+    }
+    fun changeDailyPlayLimit(delta: Int) = c.settings.update {
+        it.copy(playDailyLimitMinutes = (it.playDailyLimitMinutes + delta).coerceIn(5, 300))
     }
     /** Only call after a successful parent-PIN confirmation in SettingsScreen. */
     fun resetPlaySession() = c.settings.resetPlaySession()

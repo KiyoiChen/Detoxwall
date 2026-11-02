@@ -33,9 +33,7 @@ class DetoxAccessibilityService : AccessibilityService() {
     /** Android screen-on/off is delivered while the accessibility service is alive. */
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == Intent.ACTION_SCREEN_OFF || intent.action == Intent.ACTION_SCREEN_ON) {
-                container.settings.prepareNextPlaySession()
-            }
+            // Timers are deadline-based and do not need screen-wake resets.
             requestEvaluate()
         }
     }
@@ -64,13 +62,23 @@ class DetoxAccessibilityService : AccessibilityService() {
             DetoxTheme(mode = c.settings.current.themeMode) {
                 LockScreenContent(
                     decision = decision,
+                    settings = c.settings.current,
                     appLabel = c.installedApps::label,
                     pinManager = c.pinManager,
                     onCloseApp = { performGlobalAction(GLOBAL_ACTION_HOME) },
                     onEmergency = {
                         runCatching { startActivity(Intent(Intent.ACTION_DIAL).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     },
-                    onParentUnlock = { parentUnlock(decision) },
+                    onParentUse = {
+                        c.settings.startParentUse()
+                        GuardianService.start(this)
+                        requestEvaluate()
+                    },
+                    onParentSkipRest = {
+                        c.settings.skipRestByParent()
+                        GuardianService.start(this)
+                        requestEvaluate()
+                    },
                     onStartRound = { minutes ->
                         if (c.settings.startPlaySession(minutes)) requestEvaluate()
                     },
@@ -189,17 +197,6 @@ class DetoxAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun parentUnlock(decision: Decision) {
-        val settings = container.settings
-        when (decision) {
-            is Decision.BlockApp -> settings.addGrant(decision.packageName, PARENT_EXTRA_MINUTES)
-            is Decision.LockDevice, Decision.ChoosePlayTime -> settings.update {
-                it.copy(maintenanceUntil = System.currentTimeMillis() + PARENT_EXTRA_MINUTES * 60_000L)
-            }
-            else -> Unit
-        }
-    }
-
     private fun visibleTexts(): List<String> {
         val root = rootInActiveWindow ?: return emptyList()
         val out = ArrayList<String>()
@@ -218,6 +215,5 @@ class DetoxAccessibilityService : AccessibilityService() {
     companion object {
         private const val SYSTEM_UI = "com.android.systemui"
         private const val USAGE_CACHE_MS = 3_000L
-        private const val PARENT_EXTRA_MINUTES = 15
     }
 }
